@@ -1,0 +1,71 @@
+# ==========================================
+# Prerequisites & Operating System Files
+# ==========================================
+*.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ==========================================
+# Compiled Binaries & Static/Dynamic Libraries
+# ==========================================
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.a
+*.lib
+*.out
+*.exe
+
+# ==========================================
+# CMake Build Outputs & Artifacts
+# ==========================================
+# Ignore default and custom build directories
+/build/
+/build-*/
+/bin/
+/lib/
+/out/
+
+# In-source build artifacts (if CMake was run inside root)
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/CMakeTargets.cmake
+/Makefile
+/compile_commands.json
+*.cmake.in
+
+# CMake user presets
+CMakeUserPresets.json
+
+# Toolchain-generated files
+CTestTestfile.cmake
+/Testing/
+
+# ==========================================
+# VS Code Configuration Files
+# ==========================================
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/c_cpp_properties.json
+!.vscode/cmake-kits.json
+
+# Ignore workspace files and local history
+*.code-workspace
+.history/
+
+# ==========================================
+# Debugging & Toolchain Artifacts
+# ==========================================
+*.dSYM/
+*.su
+*.idb
+*.pdb
+gmon.out
+.clang-format-ignore
