@@ -14,6 +14,13 @@ set(CMAKE_C_EXTENSIONS OFF)
 add_executable(
     tedit
     src/main.c
+    src/terminal/terminal.c
+)
+
+target_include_directories(
+    tedit
+    PRIVATE
+    src
 )
 
 add_executable(
