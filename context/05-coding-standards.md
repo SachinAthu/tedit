@@ -90,5 +90,6 @@ KEY_ARROW_UP
 - Use `const` whenever data should not be modified.
 - Avoid magic numbers; use named constants.
 - Comments explain **why**, not **what**.
+- Document every function with a comment block at the top of the function. It must state the function's return type/value and describe each parameter.
 - Public interfaces belong in header files.
 - Keep implementation details private to source files.

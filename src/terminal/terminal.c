@@ -1,7 +1,63 @@
 #include "terminal.h"
 
+#include <errno.h> /* Gives us errno and EINTR, so we can retry interrupted writes. */
 #include <string.h> /* Gives us memset(), used to zero out the struct. */
-#include <unistd.h> /* Gives us STDIN_FILENO, the number that names the keyboard input stream. */
+#include <unistd.h> /* Gives us write() and STDIN_FILENO, the number that names the keyboard input stream. */
+
+/*
+ * Write exactly 'length' bytes to the terminal, retrying as needed.
+ *
+ * The write() system call may write fewer bytes than requested and may be
+ * interrupted by a signal before writing anything, so we loop until every
+ * byte has been sent. 'written' tracks how far we have gotten, and each
+ * iteration asks the OS to write whatever is left (data + written).
+ *
+ * Parameters:
+ *   data   - Pointer to the first byte to write. Must not be NULL.
+ *   length - How many bytes to write, starting at 'data'.
+ *
+ * Returns:
+ *   bool: true  -> all 'length' bytes were written.
+ *         false -> data was NULL, or the OS reported an error.
+ */
+static bool terminal_write_all(const char *data, size_t length)
+{
+    if (data == NULL)
+    {
+        return false;
+    }
+
+    size_t written = 0;
+
+    while (written < length)
+    {
+        ssize_t result;
+
+        /* Ask the OS to write the remaining bytes. */
+        result = write(STDOUT_FILENO, data + written, length - written);
+
+        if (result < 0)
+        {
+            /* EINTR means a signal interrupted us; retrying is safe. */
+            if (errno == EINTR)
+            {
+                continue;
+            }
+
+            return false;
+        }
+
+        /* A return value of 0 means nothing could be written; give up. */
+        if (result == 0)
+        {
+            return false;
+        }
+
+        written += (size_t)result;
+    }
+
+    return true;
+}
 
 /*
  * Prepares the terminal before we start using it.
@@ -154,4 +210,60 @@ void terminal_restore(TerminalState *terminal)
 
     /* Update our flag to match reality: raw mode is now off. */
     terminal->raw_mode_enabled = false;
+}
+
+/*
+ * Switch the terminal to its "alternate screen".
+ *
+ * The alternate screen is a second, empty screen the terminal keeps apart
+ * from the user's normal scrollback. Drawing there lets the editor repaint
+ * freely without polluting shell history, and leaving it restores whatever
+ * was on screen before.
+ *
+ * Parameters:
+ *   terminal (TerminalState *): pointer to the state to update. Must not be
+ *                               NULL.
+ *
+ * Returns:
+ *   bool: true  -> the alternate screen is now active.
+ *         false -> the escape sequence could not be written.
+ */
+bool terminal_enter_alternate_screen(TerminalState *terminal)
+{
+    /* "\x1b[?1049h" is the escape sequence that enters the alternate screen. */
+    if (!terminal_write_all("\x1b[?1049h", 8))
+    {
+        return false;
+    }
+
+    /* Remember the switch so that leaving is only attempted when needed. */
+    terminal->alternate_screen_enabled = true;
+    return true;
+}
+
+/*
+ * Return the terminal to its normal screen.
+ *
+ * This undoes terminal_enter_alternate_screen(), restoring the screen the
+ * user had before the editor started. It is safe to call when the alternate
+ * screen was never entered, in which case it does nothing.
+ *
+ * Parameters:
+ *   terminal (TerminalState *): pointer to the state tracking whether the
+ *                               alternate screen is active. Must not be NULL.
+ *
+ * Returns:
+ *   void: nothing.
+ */
+void terminal_leave_alternate_screen(TerminalState *terminal)
+{
+    /* Nothing to undo if we never switched to the alternate screen. */
+    if (!terminal->alternate_screen_enabled)
+    {
+        return;
+    }
+
+    /* "\x1b[?1049l" is the escape sequence that leaves the alternate screen. */
+    (void)terminal_write_all("\x1b[?1049l", 8);
+    terminal->alternate_screen_enabled = false;
 }

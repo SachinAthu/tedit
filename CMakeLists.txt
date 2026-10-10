@@ -15,6 +15,11 @@ add_executable(
     tedit
     src/main.c
     src/terminal/terminal.c
+    src/state/editor_state.c
+    src/document/document.c
+    src/cursor/cursor.c
+    src/renderer/screen_buffer.c
+    src/renderer/renderer.c
 )
 
 target_include_directories(
