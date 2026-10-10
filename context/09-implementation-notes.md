@@ -4,15 +4,26 @@
 
 Volume X is being implemented as a separate C99/Linux-POSIX implementation repository. The source code is the primary artifact, and implementation proceeds incrementally from the minimal runtime toward the complete terminal editor.
 
+The implementation must remain consistent with the Book Bible, Software Requirements Specification, System Architecture, Runtime Model, Coding Standards, Project Structure, and Architecture Decision Records.
+
+The implementation repository maintains four complementary context documents:
+
+- `current-state.md` — concise snapshot of the current implementation.
+- `implementation-status.md` — milestone progress and verification status.
+- `implementation-notes.md` — important implementation discoveries, decisions, and reasoning.
+- `known-issues.md` — unresolved implementation problems.
+
+---
+
 ## Chapter 45 — Establishing the Runtime
 
 Chapter 45 established the first executable runtime of the editor.
 
-The implementation deliberately stops at the runtime boundary. Editor-specific components have not yet been introduced.
+The implementation deliberately stopped at the runtime boundary. Editor-specific components were introduced in the next milestone rather than being mixed into terminal initialization.
 
 ### Terminal State
 
-A dedicated `terminal` module now owns terminal configuration.
+A dedicated `terminal` module owns terminal configuration.
 
 The module maintains:
 
@@ -25,33 +36,21 @@ TerminalState
 
 The original terminal attributes are captured during initialization and retained until cleanup.
 
-Raw mode is constructed from the saved attributes rather than modifying the saved copy directly.
-
-The `raw_mode_enabled` state is set only after the terminal successfully accepts the new attributes.
+Raw mode is constructed from the saved attributes rather than modifying the saved copy directly. The `raw_mode_enabled` state is set only after the terminal successfully accepts the new attributes.
 
 ### Raw Mode
 
-The runtime now enables POSIX raw terminal behavior appropriate for the editor.
+The runtime enables POSIX raw terminal behavior appropriate for interactive editing.
 
-The implementation disables normal terminal processing required for interactive editor input, including:
-
-- character echo,
-- canonical input processing,
-- signal generation,
-- extended input processing,
-- relevant input/output translations.
-
-Input is configured so that the event loop can receive input without waiting for a complete terminal line.
+The implementation disables normal terminal processing required for editor input, including character echo and canonical input processing. This allows the application to receive input without waiting for a complete terminal line.
 
 ### Terminal Cleanup
 
 Terminal restoration is explicitly part of the application lifecycle.
 
-The application does not simply terminate the process after entering raw mode. It first restores the original terminal attributes.
+The application must not simply terminate after entering raw mode. It restores the original terminal attributes before exiting. Cleanup is also safe when initialization succeeded but raw mode was never successfully enabled.
 
-Cleanup is also safe when initialization succeeded but raw mode was never successfully enabled.
-
-This establishes the runtime invariant:
+The runtime invariant is:
 
 ```text
 If raw mode was successfully enabled,
@@ -59,109 +58,329 @@ the application must restore the original terminal state
 before normal termination.
 ```
 
+This invariant applies to both normal exit and failure paths.
+
 ### Application Lifecycle
 
-The runtime now follows:
+The runtime follows this sequence:
 
 ```text
 Program Start
-      ↓
+      |
+      v
 Terminal Initialization
-      ↓
+      |
+      v
 Raw Mode Activation
-      ↓
+      |
+      v
 Event Loop
-      ↓
+      |
+      v
 Exit Condition
-      ↓
+      |
+      v
 Terminal Restoration
-      ↓
+      |
+      v
 Program Exit
 ```
 
-Initialization failures prevent entry into the event loop.
-
-If raw-mode activation fails after terminal initialization, cleanup is still performed before termination.
+Initialization failures prevent entry into the event loop. If raw-mode activation fails after terminal initialization, cleanup is still performed before termination.
 
 ### Minimal Event Loop
 
-The event loop is intentionally temporary and minimal.
-
-Its current behavior is:
+The initial event loop is intentionally temporary and minimal:
 
 ```text
 Wait for one input byte
-        │
-        ├── Ctrl-Q → exit
-        │
-        ├── EOF → exit
-        │
-        └── other byte → ignore
+        |
+        +-- Ctrl-Q --> Exit
+        |
+        +-- EOF ----> Exit
+        |
+        +-- Other --> Ignore
 ```
 
-The loop currently performs a blocking `read()` and reads one byte at a time.
+The loop uses a blocking `read()` and reads one byte at a time.
 
-The direct `Ctrl-Q` check is not intended to become the final input architecture. It will later be replaced by the established Input Handler → Input Parser → Input Engine → Command Engine pipeline.
-
-### Source Files Added
-
-Chapter 45 introduced:
+The direct `Ctrl-Q` check is not intended to become the final input architecture. It will later be replaced by the established:
 
 ```text
-src/terminal/terminal.h
-src/terminal/terminal.c
+Input Handler
+      |
+      v
+Input Parser
+      |
+      v
+Input Engine
+      |
+      v
+Command Engine
 ```
-
-and modified:
-
-```text
-src/main.c
-CMakeLists.txt
-```
-
-The terminal implementation is compiled into the `tedit` executable through CMake.
 
 ### Architectural Boundary
 
-The terminal implementation is kept at the platform-facing boundary.
+The terminal implementation remains at the platform-facing boundary. Terminal configuration and restoration do not require the runtime to know about Document, Cursor, Viewport, Renderer, or the future input-processing components.
 
-The current runtime does not introduce dependencies on:
-
-```text
-Document
-Cursor
-Viewport
-Editor State
-Renderer
-Input Parser
-Input Engine
-Command Engine
-File Manager
-```
-
-This preserves the staged construction defined for Volume X.
-
-### Testing and Verification
-
-The existing smoke test remains part of the CMake test configuration.
-
-Chapter 45 also established manual runtime verification:
-
-```text
-Application starts
-Raw mode is active
-Characters are not normally echoed
-Ctrl-Q exits
-Terminal settings are restored
-Shell input works normally afterward
-```
-
-The runtime milestone is considered complete only when the implementation and existing test baseline remain intact.
+This establishes the principle that platform lifecycle management should be reliable before editor behavior depends on it.
 
 ### Implementation Lesson
 
-The first runtime milestone demonstrates an important implementation principle:
-
 > Establish the application's lifecycle and ownership boundaries before adding editor behavior.
 
-The terminal must be reliably initialized and restored before later components can safely depend on it.
+---
+
+## Chapter 46 — Building the First Editable Screen
+
+Chapter 46 introduced the first persistent editor state, a document representation, a basic Cursor, a Screen Buffer, and a Renderer. The application now supports a limited but working interactive editing loop.
+
+The implementation was built on top of the existing terminal runtime rather than replacing it.
+
+### Editor State as the Central State Model
+
+`EditorState` owns the Document and Cursor:
+
+```text
+EditorState
+├── Document
+└── Cursor
+```
+
+This follows ADR-006: Editor State is the central source of truth for the application's editing state.
+
+The Renderer receives a `const EditorState *`, making its read-only relationship to editor state explicit. Rendering should transform the current state into visible output rather than modifying the Document or Cursor.
+
+### Document Representation
+
+The Document uses a dynamically allocated vector of logical lines.
+
+Each `DocumentLine` contains:
+
+```text
+DocumentLine
+├── data
+├── length
+└── capacity
+```
+
+The Document itself maintains the line array, its current count, and its capacity.
+
+The initial Document contains one empty line. This gives the editor a valid starting document without requiring a special empty-document case in basic rendering and insertion.
+
+Line contents are stored as byte arrays with an explicit length. They are not maintained as conventional NUL-terminated C strings. Document operations and rendering must therefore respect the recorded length rather than relying on string functions that expect a terminating NUL byte.
+
+Character insertion shifts existing bytes when necessary and increases the line length. The initial interactive editing path accepts printable ASCII, so the current byte-oriented implementation is sufficient for this milestone.
+
+This is an initial representation, not the final Unicode editing model. UTF-8 decoding and the distinction between byte offsets and logical character positions remain future work.
+
+### Cursor Ownership and Coordinates
+
+The Cursor stores zero-based logical document coordinates:
+
+```text
+Cursor
+├── row
+└── column
+```
+
+Cursor operations validate positions against the Document. The Cursor does not own or modify document text; text changes remain Document responsibilities.
+
+The current `cursor_advance()` operation supports movement after a successful character insertion. Full navigation, preferred-column behavior, and movement across logical lines are deferred to later milestones.
+
+### Screen Buffer
+
+The Screen Buffer is a reusable grid of `ScreenCell` values backed by one contiguous allocation.
+
+Its logical dimensions are the terminal rows and columns. A cell can be addressed using:
+
+```text
+index = row * columns + column
+```
+
+The buffer provides operations to initialize and destroy its storage, clear its cells, set individual cells, and retrieve cells within bounds.
+
+The Screen Buffer separates the representation of a frame from the act of writing terminal output. The Renderer can construct the visible frame before sending it to the terminal.
+
+The buffer represents the current visible terminal grid, not the complete document. The Document remains the authoritative owner of text.
+
+### Full-Redraw Rendering
+
+The implementation follows ADR-002: full redraw remains the baseline rendering strategy.
+
+The Renderer builds a frame from the current Editor State:
+
+```text
+Editor State
+     |
+     v
+Build Screen Buffer
+     |
+     v
+Encode Terminal Output
+     |
+     v
+Write Frame
+     |
+     v
+Position Terminal Cursor
+```
+
+The Screen Buffer is cleared to spaces before visible document content is copied into it. Document lines are clipped to the currently visible rows and columns.
+
+This approach keeps rendering straightforward: the Renderer derives a complete visible frame from the current state instead of tracking every individual change to the screen.
+
+The initial implementation does not yet include a Viewport abstraction. The current rendering behavior is therefore limited to the portion of the document that fits directly within the terminal dimensions.
+
+### Reusable Output Buffer
+
+The Renderer also maintains a reusable output buffer.
+
+Instead of constructing and writing each screen row independently, it calculates the required output length, ensures sufficient capacity, and encodes the row-positioning escape sequences and cell contents into the buffer before writing the frame.
+
+This reduces repeated output operations and avoids allocating a new output buffer for every frame when the existing allocation is sufficient.
+
+The output-writing helper handles partial writes and interrupted system calls. A successful high-level frame write is not necessarily one operating-system `write()` call: the helper may need multiple calls to complete the output.
+
+This is an output-efficiency improvement, not a change to the rendering strategy. The editor still performs full redraws rather than dirty-cell or incremental rendering.
+
+### Terminal Cursor Visibility
+
+Manual testing exposed a terminal cursor display glitch during interactive rendering.
+
+The Renderer was changed to hide the terminal's text cursor before writing a frame and show it again afterward. The application then positions the cursor according to the editor's current Cursor state.
+
+The intended sequence is:
+
+```text
+Hide Terminal Cursor
+        |
+        v
+Write Screen Frame
+        |
+        v
+Position Terminal Cursor
+        |
+        v
+Show Terminal Cursor
+```
+
+The implementation attempts to restore cursor visibility even when a rendering operation fails. A failure while restoring visibility is also treated as a rendering failure.
+
+The distinction between the two cursor concepts matters:
+
+- **Editor Cursor** — logical row and column in the Document.
+- **Terminal Cursor** — terminal emulator's text insertion position.
+
+The Renderer translates the former into the latter. Hiding the terminal cursor is a presentation operation; it does not change the Editor State.
+
+### Application Editing Loop
+
+The current application loop connects the existing runtime to the new editing components:
+
+```text
+Read Input Byte
+      |
+      v
+Check Exit Condition
+      |
+      v
+Check Printable ASCII
+      |
+      v
+Insert Character
+      |
+      v
+Advance Cursor
+      |
+      v
+Render Frame
+      |
+      v
+Wait for Next Input
+```
+
+The implementation currently handles input directly in `main.c`. This is a temporary arrangement for the first editable-screen milestone, not the final input architecture.
+
+The loop ignores unsupported bytes and exits on `Ctrl-Q`. It also prevents insertion from reaching the final terminal column because the implementation does not yet have a Viewport or horizontal-scrolling behavior.
+
+The event loop redraws after successful character insertion. This keeps the initial interaction model simple while the input and command architecture remains unfinished.
+
+### Resource Ownership and Cleanup
+
+The new modules introduce additional dynamically allocated resources:
+
+- Document line storage and the line array.
+- Screen Buffer cell storage.
+- Renderer output-buffer storage.
+
+Each module provides initialization and destruction functions for its owned resources.
+
+The application tracks successful initialization so cleanup can destroy only the components that were initialized. Terminal restoration remains part of the final cleanup path.
+
+The general rule is:
+
+> A component owns the resources it allocates and provides the operations required to release them.
+
+This keeps memory management explicit and reduces the risk of double-free operations or cleanup of uninitialized resources.
+
+### Verification and Evidence
+
+The following Chapter 46 checks were reported as successful:
+
+- The project builds successfully.
+- The initial screen is displayed.
+- Printable ASCII characters can be inserted.
+- Repeated typing updates the visible document.
+- The Cursor advances after insertion.
+- The terminal cursor display glitch is resolved by the hide/show change.
+- `Ctrl-Q` exits the application.
+- Terminal settings are restored, and the shell remains usable afterward.
+
+These are build and manual-verification results. They do not establish that comprehensive automated tests for Document, Cursor, Screen Buffer, and Renderer have passed.
+
+### Current Limitations
+
+The first editable screen remains intentionally incomplete.
+
+The implementation does not yet provide:
+
+- Backspace or Delete.
+- Enter and logical-line splitting.
+- Full Cursor navigation.
+- Preferred-column navigation.
+- Viewport-based scrolling.
+- UTF-8-aware interactive input.
+- File loading or saving.
+- A Dirty Flag.
+- Input Handler, Input Parser, Input Engine, or Command Engine integration.
+- Status Bar or Message Bar.
+- Terminal resize handling.
+- Dirty-cell rendering.
+- Comprehensive automated tests.
+
+These are implementation gaps, not reasons to replace the working foundation.
+
+### Implementation Lessons
+
+Chapter 46 establishes several useful lessons:
+
+1. **Build on the previous milestone.** New editor behavior should extend the terminal runtime without unnecessarily rewriting it.
+2. **Keep document data authoritative.** The Screen Buffer is a rendered representation, not a second document model.
+3. **Make ownership explicit.** Document, Screen Buffer, and Renderer each manage their own allocations.
+4. **Separate rendering from state mutation.** The Renderer observes Editor State and generates output.
+5. **Measure optimization at the correct layer.** Buffering terminal output reduces output overhead without requiring incremental rendering.
+6. **Test terminal behavior in the actual environment.** A successful build alone cannot reveal all terminal cursor and restoration problems.
+7. **Keep temporary code visibly temporary.** Direct input handling in the application loop must eventually move into the planned input architecture.
+
+---
+
+## Next Milestone — Chapter 47: Editing Text
+
+The next milestone should extend the existing implementation rather than start over.
+
+The primary work is to introduce additional editing operations, including character deletion, establish the required Cursor behavior, and introduce the Dirty Flag to track document modifications.
+
+The next implementation should also identify the new Document and Cursor invariants and provide appropriate tests for editing operations and boundary conditions.
+
+The implementation must continue from the authoritative source files in the repository. Any changes to existing interfaces or modules should be explicitly identified and justified.

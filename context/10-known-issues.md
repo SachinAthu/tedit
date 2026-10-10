@@ -2,7 +2,7 @@
 
 ## Open Issues
 
-None identified.
+No known unresolved issues have been identified.
 
 ## Notes
 

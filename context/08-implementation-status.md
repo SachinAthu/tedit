@@ -4,112 +4,127 @@
 
 **Active — Volume X implementation**
 
-The implementation repository has progressed beyond the preparation stage and now contains the first executable runtime milestone.
+The project has completed the runtime foundation and the first editable-screen milestone. The application now displays a document, accepts printable ASCII input, updates the Cursor, and redraws the screen.
 
 ## Completed
 
 ### Volume X Preparation
 
-- [x] Implementation repository defined
-- [x] Git workflow defined
-- [x] CMake build structure defined
-- [x] C99 compiler policy defined
-- [x] Development build configuration defined
-- [x] Release build configuration defined
-- [x] Testing baseline defined
-- [x] Project structure established
+- [x] Implementation repository and project structure established
+- [x] Git workflow established
+- [x] CMake build structure and C99 configuration established
+- [x] Development and release build configurations defined
+- [x] Testing baseline established
 - [x] Implementation documentation initialized
-- [x] Initial implementation workflow established
 
 ### Chapter 45 — Establishing the Runtime
 
-- [x] Terminal state structure implemented
-- [x] Terminal initialization implemented
+- [x] Terminal state and initialization implemented
 - [x] Original terminal attributes preserved
 - [x] Raw terminal mode implemented
 - [x] Terminal restoration implemented
-- [x] Application lifecycle implemented
-- [x] Minimal event loop implemented
-- [x] Temporary `Ctrl-Q` exit implemented
-- [x] EOF handling implemented
-- [x] Failure paths for terminal initialization/raw-mode activation implemented
-- [x] Terminal cleanup integrated into application shutdown
-- [x] Terminal implementation added to CMake
+- [x] Application lifecycle and blocking event loop implemented
+- [x] Temporary `Ctrl-Q` exit and EOF handling implemented
+- [x] Failure-path cleanup integrated
+- [x] Terminal module added to the build
 - [x] Existing smoke test retained
-- [x] Chapter 45 runtime milestone committed to Git
+- [x] Runtime milestone committed to Git
 
-## Current Runtime State
+### Chapter 46 — Building the First Editable Screen
+
+- [x] `EditorState` implemented as the central editor state
+- [x] Dynamic `Document` with a vector of lines implemented
+- [x] Basic `Cursor` state and position validation implemented
+- [x] Character insertion into document lines implemented
+- [x] Reusable contiguous `ScreenBuffer` implemented
+- [x] Full-redraw `Renderer` implemented
+- [x] Terminal output buffered to reduce output operations
+- [x] Terminal text cursor hidden during rendering and restored afterward
+- [x] Initial screen display implemented
+- [x] Printable ASCII insertion and Cursor advancement integrated
+- [x] Event loop integrated with the editing and rendering path
+- [x] Cleanup for Renderer, Editor State, and terminal state integrated
+
+## Current Runtime Capabilities
 
 The application can now:
 
-- start from a terminal,
-- save the original terminal configuration,
-- enter raw mode,
-- receive input without normal terminal echo,
-- wait for input in a blocking event loop,
-- exit through `Ctrl-Q` or EOF,
-- restore the original terminal configuration,
-- return control to the shell.
+- initialize the terminal and enter raw mode;
+- preserve and restore the original terminal configuration;
+- obtain the terminal dimensions;
+- initialize the Editor State and its Document;
+- render the visible document through a Screen Buffer;
+- insert printable ASCII characters into the Document;
+- advance the Cursor after successful insertion;
+- redraw the screen after editing;
+- exit using `Ctrl-Q`;
+- clean up initialized resources and return control to the shell.
 
-The runtime does not yet implement editor functionality.
+## Verification
 
-## Not Yet Implemented
+- [x] Build completed successfully, as reported
+- [x] Initial screen display manually checked
+- [x] Printable ASCII insertion and repeated typing manually checked
+- [x] Cursor advancement manually checked
+- [x] Terminal cursor rendering glitch addressed and manually checked
+- [x] `Ctrl-Q` exit and terminal restoration manually checked
+- [ ] Comprehensive automated tests for Document, Cursor, Screen Buffer, and Renderer
+- [ ] Integration and regression testing across failure paths
 
-### Chapter 46 — First Editable Screen
-
-- [ ] Editor State
-- [ ] Document
-- [ ] Cursor
-- [ ] Screen Buffer
-- [ ] Basic Renderer
-- [ ] Screen output
-- [ ] Cursor display
-- [ ] First interactive editing loop
-
-### Later Milestones
-
-- [ ] Chapter 47 — Editing Text
-- [ ] Chapter 48 — Working with Lines
-- [ ] Chapter 49 — Navigating the Document
-- [ ] Chapter 50 — Opening Files
-- [ ] Chapter 51 — Saving Files
-- [ ] Chapter 52 — Completing the Editor Interface
-- [ ] Chapter 53 — Hardening the Editor
-- [ ] Chapter 54 — Final Integration and Release
+Manual verification does not imply that comprehensive automated tests have passed.
 
 ## Implementation Status Summary
 
-| Area                    | Status      |
-| ----------------------- | ----------- |
-| Repository              | Complete    |
-| Git workflow            | Complete    |
-| CMake                   | Complete    |
-| C99 configuration       | Complete    |
-| Testing baseline        | Complete    |
-| Terminal initialization | Complete    |
-| Raw mode                | Complete    |
-| Terminal cleanup        | Complete    |
-| Application lifecycle   | Complete    |
-| Minimal event loop      | Complete    |
-| Editor State            | Not started |
-| Document                | Not started |
-| Cursor                  | Not started |
-| Renderer                | Not started |
-| Editing                 | Not started |
-| Navigation              | Not started |
-| File loading            | Not started |
-| File saving             | Not started |
-| Input pipeline          | Not started |
-| User interface          | Not started |
-| Hardening               | Not started |
-| Final integration       | Not started |
+| Area                                 | Status                           |
+| ------------------------------------ | -------------------------------- |
+| Repository and Git workflow          | Established                      |
+| CMake and C99 configuration          | Established                      |
+| Terminal initialization and raw mode | Implemented                      |
+| Terminal restoration and cleanup     | Implemented                      |
+| Application lifecycle and event loop | Implemented                      |
+| Editor State                         | Implemented                      |
+| Document                             | Basic implementation             |
+| Cursor                               | Basic implementation             |
+| Screen Buffer                        | Implemented                      |
+| Renderer                             | Basic full-redraw implementation |
+| Printable ASCII insertion            | Implemented                      |
+| Line splitting and deletion          | Not implemented                  |
+| Full document navigation             | Not implemented                  |
+| Viewport and scrolling               | Not implemented                  |
+| File loading                         | Not implemented                  |
+| File saving                          | Not implemented                  |
+| Input Parser and command pipeline    | Not implemented                  |
+| Status Bar and Message Bar           | Not implemented                  |
+| Terminal resize handling             | Not implemented                  |
+| Comprehensive automated testing      | Pending                          |
+| Hardening and final integration      | Pending                          |
 
 ## Current Milestone
 
-**Chapter 45 — Establishing the Runtime: Complete**
+**Chapter 46 — Building the First Editable Screen: Complete**
+
+The build and manual checks reported for this milestone passed. The editor is an early working implementation, not yet a complete text editor.
 
 ## Next Milestone
 
-**Chapter 46 — Building the First Editable Screen**
+**Chapter 47 — Editing Text**
 
-The next implementation step is to introduce the first persistent editor state and produce visible output on the terminal.
+Planned focus:
+
+- implement additional editing operations;
+- introduce deletion behavior and the required document updates;
+- establish the rules for Cursor movement during editing;
+- introduce the Dirty Flag to track document modifications;
+- add appropriate tests for editing operations and boundary conditions.
+
+The implementation must continue from the existing source code. Changes to established modules should be explicit and justified rather than silently replacing previous implementations.
+
+## Current Limitations
+
+- Only printable ASCII characters are accepted by the current editing loop.
+- Backspace, Delete, Enter, and line splitting are not yet implemented.
+- Full Cursor navigation and Viewport-based scrolling are not yet implemented.
+- Input handling remains temporarily inside the application event loop.
+- File opening and saving are not implemented.
+- The Status Bar, Message Bar, and terminal resize handling are not implemented.
+- Comprehensive automated tests and hardening remain future work.
