@@ -2,17 +2,22 @@
 #include "state/editor_state.h"
 #include "renderer/renderer.h"
 
-#include <unistd.h> /* Gives us read() and STDIN_FILENO (the keyboard input stream). */
-#include <stdbool.h> /* Gives us bool, true, and false. */
+#include <unistd.h>    /* Gives us read() and STDIN_FILENO (the keyboard input stream). */
+#include <stdbool.h>   /* Gives us bool, true, and false. */
 #include <sys/ioctl.h> /* Gives us ioctl(), struct winsize, and TIOCGWINSZ. */
-#include <errno.h> /* Gives us errno and EINTR, so we can retry interrupted reads. */
-#include <stddef.h> /* Gives us size_t and NULL. */
+#include <errno.h>     /* Gives us errno and EINTR, so we can retry interrupted reads. */
+#include <stddef.h>    /* Gives us size_t and NULL. */
+#include <sys/select.h>
 
 /* The byte the terminal sends when the user presses Ctrl-Q.
  * 0x11 is hexadecimal for 17, which is Ctrl-Q's ASCII control code.
  * A #define is a text replacement: everywhere CONTROL_Q appears, the compiler
  * substitutes 0x11. Using a name instead of a bare number makes it readable. */
 #define CONTROL_Q 0x11
+#define BACKSPACE 0x7F
+#define BACKSPACE_ALT 0x08
+#define ESCAPE 0x1B
+#define ESCAPE_TIMEOUT 50000
 
 /*
  * Ask the terminal how many rows and columns it currently has.
@@ -61,6 +66,53 @@ static bool get_terminal_size(size_t *rows, size_t *columns)
     return true;
 }
 
+static int read_escape_byte(unsigned char *byte)
+{
+    fd_set read_set;
+    struct timeval timeout;
+    int result;
+
+    FD_ZERO(&read_set);
+    FD_SET(STDIN_FILENO, &read_set);
+    timeout.tv_sec = 0;
+    timeout.tv_usec = ESCAPE_TIMEOUT;
+
+    do
+    {
+        result = select(STDIN_FILENO + 1, &read_set, NULL, NULL, &timeout);
+    } while (result == -1 && errno == EINTR);
+
+    if (result <= 0)
+    {
+        return result;
+    }
+
+    for (;;)
+    {
+        const ssize_t bytes_read = read(STDIN_FILENO, byte, sizeof(*byte));
+
+        if (bytes_read == 1)
+        {
+            return 1;
+        }
+
+        if (bytes_read == 0)
+        {
+            return 0;
+        }
+
+        if (errno != EINTR)
+        {
+            return -1;
+        }
+    }
+}
+
+static bool redraw_after_action(Renderer *renderer, const EditorState *state)
+{
+    return renderer_render(renderer, state);
+}
+
 /*
  * The main loop of the editor.
  * It keeps reading one key at a time and stops when the user asks to quit.
@@ -75,12 +127,13 @@ static bool get_terminal_size(size_t *rows, size_t *columns)
  */
 static bool application_event_loop(EditorState *state, Renderer *renderer)
 {
+    if (state == NULL || renderer == NULL)
+    {
+        return false;
+    }
+
     while (true)
     {
-        if (state == NULL || renderer == NULL)
-        {
-            return false;
-        }
 
         /* One keystroke is a single byte. unsigned char holds 0..255, which is
          * the full range of byte values we can read. Declared inside the loop
@@ -106,15 +159,61 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
         }
 
         /* Zero bytes means end-of-input (the stream closed), so stop. */
-        if (bytes_read == 0)
+        /* Ctrl-Q is the temporary command that quits the editor. */
+        if (bytes_read == 0 || input == CONTROL_Q)
         {
             return true;
         }
 
-        /* Ctrl-Q is the temporary command that quits the editor. */
-        if (input == CONTROL_Q)
+        if (input == ESCAPE)
         {
-            return true;
+            unsigned char first;
+            unsigned char second;
+
+            if (read_escape_byte(&first) != 1 || first != '[' || read_escape_byte(&second) != 1)
+            {
+                continue;
+            }
+
+            bool moved = false;
+            if (second == 'D')
+            {
+                moved = cursor_move_left(&state->cursor);
+            }
+            else if (second == 'C')
+            {
+                moved = cursor_move_right(&state->cursor, &state->document);
+            }
+
+            if (moved && !redraw_after_action(renderer, state))
+            {
+                return false;
+            }
+
+            continue;
+        }
+
+        if (input == BACKSPACE || input == BACKSPACE_ALT)
+        {
+            if (state->cursor.column == 0)
+            {
+                continue;
+            }
+
+            const size_t delete_column = state->cursor.column - 1;
+            if (!document_delete_character(&state->document, state->cursor.row, delete_column))
+            {
+                continue;
+            }
+
+            state->cursor.column = delete_column;
+            state->is_dirty = true;
+
+            if (!redraw_after_action(renderer, state))
+            {
+                return false;
+            }
+            continue;
         }
 
         /*
@@ -148,6 +247,8 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
         {
             return false;
         }
+
+        state->is_dirty = true;
 
         /*
          * Render the updated Editor State.

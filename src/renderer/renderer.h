@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "../state/editor_state.h"
+#include "state/editor_state.h"
 #include "screen_buffer.h"
 
 typedef struct

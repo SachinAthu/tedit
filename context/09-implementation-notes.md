@@ -375,12 +375,92 @@ Chapter 46 establishes several useful lessons:
 
 ---
 
-## Next Milestone — Chapter 47: Editing Text
+## Chapter 47 — Editing Text
 
-The next milestone should extend the existing implementation rather than start over.
+Chapter 47 extends the editable-screen foundation with horizontal Cursor movement, Backspace deletion within a logical line, and a Dirty Flag. The implementation keeps the existing Document, Cursor, Editor State, Screen Buffer, Renderer, and event-loop structure. It does not yet introduce line splitting, line merging, or a dedicated input-processing pipeline.
 
-The primary work is to introduce additional editing operations, including character deletion, establish the required Cursor behavior, and introduce the Dirty Flag to track document modifications.
+### Horizontal Cursor Movement
 
-The next implementation should also identify the new Document and Cursor invariants and provide appropriate tests for editing operations and boundary conditions.
+The input loop recognizes the basic terminal escape sequences for Left and Right Arrow keys. These invoke the Cursor movement operations, which constrain movement to the current logical line. The Cursor does not move vertically or cross a logical-line boundary in this milestone.
 
-The implementation must continue from the authoritative source files in the repository. Any changes to existing interfaces or modules should be explicitly identified and justified.
+This is deliberately a narrow navigation increment: the Cursor can move among character positions on a line, while document-wide navigation and Viewport behavior remain future work.
+
+### Character Deletion and Backspace
+
+The Document exposes a character-deletion operation that validates the requested logical row and column before modifying the line. For a valid position, bytes following the deleted character are shifted left and the line length is reduced.
+
+Backspace is handled when the input byte is `0x7F` or `0x08`. If the Cursor column is greater than zero, the application deletes the byte immediately before the Cursor, places the Cursor at that character's former column, marks the Editor State dirty, and redraws the screen. At column zero, Backspace is ignored. It does not merge the current line with the preceding line.
+
+The terminal Delete key is not implemented. It must not be described as supported merely because the Document now has a deletion operation: the current interactive path only wires deletion to Backspace.
+
+### Dirty Flag
+
+`EditorState` now contains an `is_dirty` flag initialized to `false`. Successful printable-ASCII insertion and successful Backspace deletion set the flag to `true`. Cursor movement alone does not mark the document dirty.
+
+The flag records that editing has modified the in-memory document. File saving and clearing the flag after a successful save are not yet implemented, so the flag currently has no persistence workflow attached to it.
+
+### Event-Loop Integration
+
+Input recognition remains inside `main.c`. The current loop handles the limited set of supported operations directly:
+
+```text
+Read Input
+    |
+    +-- Ctrl-Q / EOF --> Exit
+    |
+    +-- Printable ASCII --> Insert --> Advance Cursor --> Mark Dirty --> Redraw
+    |
+    +-- Backspace --> Delete Previous Byte (if column > 0)
+    |                  --> Move Cursor Left --> Mark Dirty --> Redraw
+    |
+    +-- Left / Right Arrow --> Move Cursor Within Line --> Redraw
+    |
+    +-- Other Input --> Ignore
+```
+
+This remains a temporary integration point. The planned Input Handler, Input Parser, Input Engine, and Command Engine have not been introduced, and unsupported input is ignored. The existing terminal-width limitation also remains: insertion cannot yet rely on Viewport-based horizontal scrolling.
+
+### Verification and Evidence
+
+For the Chapter 47 repository snapshot, the following checks succeeded:
+
+- CMake configuration completed successfully.
+- The project built successfully.
+- The `smoke` automated test passed.
+- The `editing` automated test passed.
+
+These results confirm the recorded build and automated-test run for that snapshot; they do not establish comprehensive correctness. Manual verification of Left/Right Arrow behavior, Backspace boundaries, redraw behavior, and terminal cleanup after editing remains outstanding.
+
+### Current Limitations
+
+Chapter 47 does not yet provide:
+
+- Delete-key handling.
+- Enter or logical-line splitting.
+- Backspace line merging at column zero.
+- Vertical Cursor movement or full document navigation.
+- Viewport-based scrolling.
+- UTF-8-aware editing; the interactive insertion path remains printable ASCII and deletion is byte-oriented.
+- File loading or saving.
+- A save workflow that clears the Dirty Flag.
+- The dedicated input-processing and command pipeline.
+- Status Bar, Message Bar, terminal resize handling, or comprehensive test coverage.
+
+These are known scope boundaries for the current milestone, not claims that the corresponding features have been tested and found defective.
+
+### Implementation Lessons
+
+1. **Wire behavior explicitly.** A Document deletion primitive does not imply that every deletion key is supported by the interactive application.
+2. **Keep Cursor and Document responsibilities separate.** The Document changes line contents; the application coordinates the edit with Cursor placement, Dirty Flag updates, and redraw.
+3. **Track mutations, not navigation.** In this milestone, insertion and successful deletion mark the document dirty; horizontal movement alone does not.
+4. **Treat boundaries as defined behavior.** Backspace at column zero is currently a no-op; line merging belongs to the next milestone.
+5. **Separate automated evidence from manual verification.** Passing the current smoke and editing tests does not replace testing the key sequences and terminal behavior interactively.
+6. **Continue from the current source.** Chapter 48 should extend the existing Document and Cursor APIs with line operations instead of replacing the implementation wholesale.
+
+---
+
+## Next Milestone — Chapter 48: Working with Lines
+
+Chapter 48 should add editing operations that change the Document's logical-line structure while preserving the established vector-of-lines representation. The main work is to implement Enter and line splitting at the Cursor, and to merge adjacent lines when Backspace is pressed at column zero, according to the established line-editing rules.
+
+The implementation should define and test the effects on Document validity, Cursor position, empty lines, and line boundaries. It should add focused tests for splitting and merging and retain the existing smoke and editing tests as regression checks. The work should continue from the authoritative source files and make any interface changes explicit and justified.

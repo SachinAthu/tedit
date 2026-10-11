@@ -29,6 +29,7 @@ bool editor_state_init(EditorState *state)
     }
 
     cursor_init(&state->cursor);
+    state->is_dirty = false;
 
     return true;
 }
@@ -51,4 +52,5 @@ void editor_state_destroy(EditorState *state)
 
     document_destroy(&state->document);
     cursor_init(&state->cursor);
+    state->is_dirty = false;
 }

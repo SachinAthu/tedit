@@ -26,4 +26,6 @@ DocumentLine *document_get_line(Document *document, size_t row);
 
 bool document_insert_character(Document *document, size_t row, size_t column, char character);
 
+bool document_delete_character(Document *document, size_t row, size_t column);
+
 #endif

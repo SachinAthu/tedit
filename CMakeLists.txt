@@ -11,9 +11,9 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
-add_executable(
-    tedit
-    src/main.c
+add_library(
+    tedit_core
+    STATIC
     src/terminal/terminal.c
     src/state/editor_state.c
     src/document/document.c
@@ -22,18 +22,21 @@ add_executable(
     src/renderer/renderer.c
 )
 
-target_include_directories(
-    tedit
-    PRIVATE
-    src
-)
+target_include_directories(tedit_core PUBLIC src)
 
 add_executable(
-    test_smoke
-    tests/test_smoke.c
+    tedit
+    src/main.c
 )
 
-add_test(
-    NAME smoke
-    COMMAND test_smoke
-)
+target_link_libraries(tedit PRIVATE tedit_core)
+
+# tests
+
+add_executable(test_smoke tests/test_smoke.c)
+add_executable(test_editing tests/test_editing.c)
+
+target_link_libraries(test_editing PRIVATE tedit_core)
+
+add_test(NAME smoke COMMAND test_smoke)
+add_test(NAME editing COMMAND test_editing)

@@ -1,8 +1,8 @@
 #ifndef STATE_EDITOR_STATE_H
 #define STATE_EDITOR_STATE_H
 
-#include "../cursor/cursor.h"
-#include "../document/document.h"
+#include "cursor/cursor.h"
+#include "document/document.h"
 
 #include <stdbool.h>
 
@@ -10,6 +10,7 @@ typedef struct
 {
     Document document;
     Cursor cursor;
+    bool is_dirty;
 } EditorState;
 
 bool editor_state_init(EditorState *state);

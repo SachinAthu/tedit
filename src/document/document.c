@@ -291,3 +291,36 @@ bool document_insert_character(Document *document, size_t row, size_t column, ch
 
     return true;
 }
+
+/*
+ * Delete one character from the given line at the given column, shifting the
+ * remaining characters to the left.
+ *
+ * Parameters:
+ *   document - the document to modify.
+ *   row      - the zero-based index of the target line.
+ *   column   - the zero-based position of the character to delete.
+ *
+ * Returns:
+ *   true on success, false if the line does not exist or `column` is at or past
+ *   the end of the line.
+ */
+bool document_delete_character(Document *document, size_t row, size_t column)
+{
+    DocumentLine *line = document_get_line(document, row);
+
+    /* Reject invalid rows and columns that do not point at a character. */
+    if (line == NULL || column >= line->length)
+    {
+        return false;
+    }
+
+    /*
+     * Shift everything after the deleted character one byte to the left, which
+     * overwrites it, then shrink the length.
+     */
+    memmove(&line->data[column], &line->data[column + 1], line->length - column - 1);
+    line->length -= 1;
+
+    return true;
+}
