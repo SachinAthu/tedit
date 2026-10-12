@@ -325,6 +325,22 @@ bool document_delete_character(Document *document, size_t row, size_t column)
     return true;
 }
 
+/*
+ * Split a line in two at a given column.
+ *
+ * The characters before `column` stay in the original line; the characters at
+ * and after `column` are moved into a brand-new line inserted directly below
+ * it. The document's line array is grown if there is no free slot.
+ *
+ * Parameters:
+ *   document - the document to modify.
+ *   row      - the zero-based index of the line to split.
+ *   column   - the zero-based position to split at (0 to line length).
+ *
+ * Returns:
+ *   true on success, false if the line does not exist, `column` is past the
+ *   end of the line, or any allocation fails.
+ */
 bool document_split_line(Document *document, size_t row, size_t column)
 {
     DocumentLine *line = document_get_line(document, row);
@@ -385,6 +401,21 @@ bool document_split_line(Document *document, size_t row, size_t column)
     return true;
 }
 
+/*
+ * Join a line with the line directly below it.
+ *
+ * The second line's characters are appended to the end of the first line, then
+ * the second line is removed and the line array is compacted. The first line's
+ * buffer is grown only if the combined text does not fit.
+ *
+ * Parameters:
+ *   document - the document to modify.
+ *   row      - the zero-based index of the first line to merge.
+ *
+ * Returns:
+ *   true on success, false if `document` is NULL, there is no line below `row`,
+ *   or growing the first line's buffer fails.
+ */
 bool document_merge_lines(Document *document, size_t row)
 {
     if (document == NULL || row >= document->line_count || row + 1 >= document->line_count)

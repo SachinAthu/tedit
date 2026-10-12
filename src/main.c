@@ -14,10 +14,17 @@
  * A #define is a text replacement: everywhere CONTROL_Q appears, the compiler
  * substitutes 0x11. Using a name instead of a bare number makes it readable. */
 #define CONTROL_Q 0x11
+/* The bytes a terminal sends for common editing keys. 0x7F is the classic
+ * Backspace key; 0x08 (Ctrl-H) is an older alternative some setups send. */
 #define BACKSPACE 0x7F
 #define BACKSPACE_ALT 0x08
+/* The Escape key. It begins multi-byte sequences for arrow keys, etc. */
 #define ESCAPE 0x1B
+/* How long (in microseconds) to wait for the rest of an Escape sequence
+ * before deciding the user simply pressed Escape on its own. */
 #define ESCAPE_TIMEOUT 50000
+/* Enter sends a carriage return (0x0D); some terminals send a line feed
+ * (0x0A) instead, so we accept both as "new line". */
 #define ENTER 0x0D
 #define LINE_FEED 0x0A
 
@@ -68,6 +75,21 @@ static bool get_terminal_size(size_t *rows, size_t *columns)
     return true;
 }
 
+/*
+ * Read the next byte of an Escape sequence, waiting only briefly.
+ *
+ * Arrow-key presses arrive as a multi-byte sequence (Escape, '[', then a
+ * letter). After seeing Escape we must check whether more bytes follow; if
+ * none arrive within ESCAPE_TIMEOUT, the user pressed Escape alone.
+ *
+ * Parameters:
+ *   byte - Out-parameter: receives the byte that was read.
+ *
+ * Returns:
+ *   1  - one byte was read and stored in `byte`.
+ *   0  - no byte arrived in time (timeout or end of input).
+ *   -1 - a read error other than an interruption occurred.
+ */
 static int read_escape_byte(unsigned char *byte)
 {
     fd_set read_set;
@@ -110,6 +132,21 @@ static int read_escape_byte(unsigned char *byte)
     }
 }
 
+/*
+ * Re-render the screen after the user changed something.
+ *
+ * This is called after every action that may have moved the cursor or changed
+ * the document. It first makes sure the cursor is still on screen, then draws
+ * a fresh frame.
+ *
+ * Parameters:
+ *   renderer - the renderer used to draw.
+ *   state    - the current editor state.
+ *
+ * Returns:
+ *   true if the cursor was kept visible and the frame was drawn, false if a
+ *   NULL argument was passed or either step failed.
+ */
 static bool redraw_after_action(Renderer *renderer, EditorState *state)
 {
     if (renderer == NULL || state == NULL)

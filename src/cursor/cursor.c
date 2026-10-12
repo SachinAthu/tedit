@@ -145,7 +145,22 @@ bool cursor_move_right(Cursor *cursor, const Document *document)
     return true;
 }
 
-/* Move vertically while preserving the preferred logical column. */
+/*
+ * Move the cursor to another line while preserving its preferred column.
+ *
+ * This is shared by cursor_move_up() and cursor_move_down(). It moves to
+ * `target_row` and tries to keep the cursor at `preferred_column`; if the
+ * target line is shorter than that, the cursor stops at the line's end.
+ *
+ * Parameters:
+ *   cursor     - the cursor to move.
+ *   document   - the document the cursor refers to.
+ *   target_row - the zero-based line to move to.
+ *
+ * Returns:
+ *   true if the cursor moved, false on NULL arguments or if `target_row` is
+ *   out of range.
+ */
 static bool cursor_move_vertical(Cursor *cursor, const Document *document,
                                  size_t target_row)
 {
@@ -169,6 +184,17 @@ static bool cursor_move_vertical(Cursor *cursor, const Document *document,
     return true;
 }
 
+/*
+ * Move the cursor up one line, keeping the preferred column when possible.
+ *
+ * Parameters:
+ *   cursor   - the cursor to move.
+ *   document - the document the cursor refers to.
+ *
+ * Returns:
+ *   true if the cursor moved up, false on NULL arguments or if the cursor is
+ *   already on the first line.
+ */
 bool cursor_move_up(Cursor *cursor, const Document *document)
 {
     if (cursor == NULL || document == NULL || cursor->row == 0 ||
@@ -180,6 +206,17 @@ bool cursor_move_up(Cursor *cursor, const Document *document)
     return cursor_move_vertical(cursor, document, cursor->row - 1);
 }
 
+/*
+ * Move the cursor down one line, keeping the preferred column when possible.
+ *
+ * Parameters:
+ *   cursor   - the cursor to move.
+ *   document - the document the cursor refers to.
+ *
+ * Returns:
+ *   true if the cursor moved down, false on NULL arguments or if the cursor is
+ *   already on the last line.
+ */
 bool cursor_move_down(Cursor *cursor, const Document *document)
 {
     if (cursor == NULL || document == NULL ||

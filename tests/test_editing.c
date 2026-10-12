@@ -9,6 +9,15 @@
 #include <string.h>
 #include <unistd.h>
 
+/*
+ * Unit tests for the core editing behaviour.
+ *
+ * Each test function below exercises one small piece of behaviour (inserting
+ * characters, moving the cursor, scrolling the viewport, drawing, or terminal
+ * control) and uses assert() so any failure stops the program with a message.
+ * main() at the bottom simply calls every test in order.
+ */
+
 static void test_document_insert_and_delete(void)
 {
     Document document;
@@ -36,6 +45,7 @@ static void test_document_insert_and_delete(void)
     document_destroy(&document);
 }
 
+/* Moving left/right stops at the start and end of the line. */
 static void test_cursor_horizontal_movement(void)
 {
     Document document;
@@ -61,6 +71,7 @@ static void test_cursor_horizontal_movement(void)
     document_destroy(&document);
 }
 
+/* Moving up/down keeps the preferred column across lines of uneven length. */
 static void test_cursor_vertical_movement_preserves_preferred_column(void)
 {
     Document document;
@@ -108,6 +119,7 @@ static void test_cursor_vertical_movement_preserves_preferred_column(void)
     document_destroy(&document);
 }
 
+/* Horizontal movement resets the remembered (preferred) column. */
 static void test_horizontal_movement_resets_preferred_column(void)
 {
     Document document;
@@ -129,6 +141,7 @@ static void test_horizontal_movement_resets_preferred_column(void)
     document_destroy(&document);
 }
 
+/* A freshly created state starts clean (not dirty). */
 static void test_dirty_flag_initial_state(void)
 {
     EditorState state;
@@ -140,6 +153,7 @@ static void test_dirty_flag_initial_state(void)
     editor_state_destroy(&state);
 }
 
+/* Splitting a line at a column produces a prefix and a suffix line. */
 static void test_document_split_line(void)
 {
     Document document;
@@ -174,6 +188,7 @@ static void test_document_split_line(void)
     document_destroy(&document);
 }
 
+/* Merging two lines joins the second onto the end of the first. */
 static void test_document_merge_lines(void)
 {
     Document document;
@@ -197,6 +212,7 @@ static void test_document_merge_lines(void)
     document_destroy(&document);
 }
 
+/* Splitting and merging while editing keeps the cursor on the right line. */
 static void test_line_editing_cursor_transitions(void)
 {
     EditorState state;
@@ -240,6 +256,7 @@ static void test_line_editing_cursor_transitions(void)
     editor_state_destroy(&state);
 }
 
+/* The viewport scrolls to keep the cursor visible. */
 static void test_viewport_tracks_cursor_visibility(void)
 {
     Viewport viewport;
@@ -261,6 +278,7 @@ static void test_viewport_tracks_cursor_visibility(void)
     assert(viewport.viewport_column == 1);
 }
 
+/* Repeated scrolling and screen edges keep the cursor inside the viewport. */
 static void test_viewport_repeated_scrolling_and_screen_boundaries(void)
 {
     Viewport viewport;
@@ -304,6 +322,7 @@ static void test_viewport_repeated_scrolling_and_screen_boundaries(void)
     assert(viewport.viewport_column == 1);
 }
 
+/* The renderer uses the viewport's row/column offsets when drawing. */
 static void test_renderer_uses_viewport_offsets(void)
 {
     EditorState state;
@@ -361,6 +380,7 @@ static void test_renderer_uses_viewport_offsets(void)
     editor_state_destroy(&state);
 }
 
+/* The renderer refuses to draw when the cursor is outside the viewport. */
 static void test_renderer_rejects_cursor_outside_viewport(void)
 {
     EditorState state;
@@ -380,6 +400,7 @@ static void test_renderer_rejects_cursor_outside_viewport(void)
     editor_state_destroy(&state);
 }
 
+/* Cursor and viewport stay in sync through long vertical and horizontal scrolls. */
 static void test_cursor_and_viewport_remain_synchronized_during_scrolling(void)
 {
     EditorState state;
@@ -459,6 +480,7 @@ static void test_cursor_and_viewport_remain_synchronized_during_scrolling(void)
     editor_state_destroy(&state);
 }
 
+/* Entering/leaving the alternate screen toggles auto-wrap correctly. */
 static void test_terminal_disables_and_restores_autowrap(void)
 {
     TerminalState terminal = {0};
@@ -492,6 +514,7 @@ static void test_terminal_disables_and_restores_autowrap(void)
     assert(strstr(output, "\x1b[?1049l") != NULL);
 }
 
+/* Invalid (zero) dimensions leave the viewport offsets unchanged. */
 static void test_viewport_invalid_dimensions_preserve_offsets(void)
 {
     Viewport viewport;
@@ -507,6 +530,7 @@ static void test_viewport_invalid_dimensions_preserve_offsets(void)
     assert(viewport.viewport_column == 6);
 }
 
+/* Zero dimensions and a NULL viewport are rejected. */
 static void test_viewport_rejects_invalid_dimensions(void)
 {
     Viewport viewport;
