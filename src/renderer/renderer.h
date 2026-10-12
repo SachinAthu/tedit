@@ -7,13 +7,11 @@
 #include "state/editor_state.h"
 #include "screen_buffer.h"
 
-/* Owns everything needed to draw a frame: the off-screen grid we draw into,
- * plus a reusable output buffer for the escape sequences sent to the terminal. */
 typedef struct
 {
-    ScreenBuffer screen_buffer; /* Off-screen grid of the visible document. */
-    char *output_buffer;        /* Reused buffer holding the terminal output. */
-    size_t output_capacity;     /* How many bytes `output_buffer` can hold. */
+    ScreenBuffer screen_buffer;
+    char *output_buffer;
+    size_t output_capacity;
 } Renderer;
 
 bool renderer_init(Renderer *renderer, size_t rows, size_t columns);

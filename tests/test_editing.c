@@ -2,18 +2,13 @@
 #include "cursor/cursor.h"
 #include "state/editor_state.h"
 #include "viewport/viewport.h"
+#include "renderer/renderer.h"
+#include "terminal/terminal.h"
 
 #include <assert.h>
 #include <string.h>
+#include <unistd.h>
 
-/*
- * Unit tests for the core editing model: the document, the cursor, and the
- * viewport. Each test builds a small document in memory, performs an editing
- * operation, and uses assert() to verify the result. Tests run from main()
- * below and do not need a terminal.
- */
-
-/* Verifies inserting and deleting characters keeps the line contents correct. */
 static void test_document_insert_and_delete(void)
 {
     Document document;
@@ -41,7 +36,6 @@ static void test_document_insert_and_delete(void)
     document_destroy(&document);
 }
 
-/* Verifies left/right cursor movement stays within the line's bounds. */
 static void test_cursor_horizontal_movement(void)
 {
     Document document;
@@ -67,7 +61,6 @@ static void test_cursor_horizontal_movement(void)
     document_destroy(&document);
 }
 
-/* Verifies moving up/down clamps the column but remembers the preferred column. */
 static void test_cursor_vertical_movement_preserves_preferred_column(void)
 {
     Document document;
@@ -115,7 +108,6 @@ static void test_cursor_vertical_movement_preserves_preferred_column(void)
     document_destroy(&document);
 }
 
-/* Verifies horizontal movement resets the preferred column to the actual column. */
 static void test_horizontal_movement_resets_preferred_column(void)
 {
     Document document;
@@ -137,7 +129,6 @@ static void test_horizontal_movement_resets_preferred_column(void)
     document_destroy(&document);
 }
 
-/* Verifies the editor state starts clean (not dirty) and the flag can be set. */
 static void test_dirty_flag_initial_state(void)
 {
     EditorState state;
@@ -149,7 +140,6 @@ static void test_dirty_flag_initial_state(void)
     editor_state_destroy(&state);
 }
 
-/* Verifies splitting a line moves the suffix into a new line below the prefix. */
 static void test_document_split_line(void)
 {
     Document document;
@@ -184,7 +174,6 @@ static void test_document_split_line(void)
     document_destroy(&document);
 }
 
-/* Verifies merging two lines joins the second line's text onto the first. */
 static void test_document_merge_lines(void)
 {
     Document document;
@@ -208,7 +197,6 @@ static void test_document_merge_lines(void)
     document_destroy(&document);
 }
 
-/* Verifies the cursor and document stay in sync across split and merge edits. */
 static void test_line_editing_cursor_transitions(void)
 {
     EditorState state;
@@ -220,27 +208,38 @@ static void test_line_editing_cursor_transitions(void)
     assert(cursor_set_position(&state.cursor, &state.document, 0, 1));
 
     assert(document_split_line(&state.document, state.cursor.row, state.cursor.column));
-    state.cursor.row += 1;
-    state.cursor.column = 0;
+    assert(cursor_set_position(&state.cursor, &state.document, 1, 0));
     state.is_dirty = true;
     assert(state.cursor.row == 1 && state.cursor.column == 0);
+    assert(state.cursor.preferred_column == 0);
     assert(state.document.line_count == 2);
+    assert(viewport_ensure_cursor_visible(&state.viewport,
+                                          state.cursor.row,
+                                          state.cursor.column,
+                                          1, 2));
+    assert(state.viewport.viewport_row == 1);
 
     assert(document_insert_character(&state.document, 1, 0, 'c'));
     assert(cursor_set_position(&state.cursor, &state.document, 1, 0));
     previous_line = document_get_line(&state.document, 0);
     assert(previous_line != NULL);
-    state.cursor.row -= 1;
-    state.cursor.column = previous_line->length;
+    assert(cursor_set_position(&state.cursor, &state.document,
+                               0, previous_line->length));
     assert(document_merge_lines(&state.document, state.cursor.row));
+    assert(cursor_set_position(&state.cursor, &state.document, 0, 1));
     assert(state.cursor.row == 0 && state.cursor.column == 1);
+    assert(state.cursor.preferred_column == 1);
     assert(state.document.line_count == 1);
+    assert(viewport_ensure_cursor_visible(&state.viewport,
+                                          state.cursor.row,
+                                          state.cursor.column,
+                                          1, 2));
+    assert(state.viewport.viewport_row == 0);
     assert(state.is_dirty);
 
     editor_state_destroy(&state);
 }
 
-/* Verifies the viewport scrolls only as much as needed to keep the cursor visible. */
 static void test_viewport_tracks_cursor_visibility(void)
 {
     Viewport viewport;
@@ -262,7 +261,252 @@ static void test_viewport_tracks_cursor_visibility(void)
     assert(viewport.viewport_column == 1);
 }
 
-/* Verifies the viewport rejects NULL input and zero screen dimensions. */
+static void test_viewport_repeated_scrolling_and_screen_boundaries(void)
+{
+    Viewport viewport;
+    const size_t screen_rows = 3;
+    const size_t screen_columns = 4;
+    size_t row;
+    size_t column;
+
+    viewport_init(&viewport);
+
+    /* Every cursor position remains inside the viewport after adjustment. */
+    for (row = 0; row < 10; ++row)
+    {
+        for (column = 0; column < 12; ++column)
+        {
+            assert(viewport_ensure_cursor_visible(
+                &viewport, row, column, screen_rows, screen_columns));
+            assert(row >= viewport.viewport_row);
+            assert(row - viewport.viewport_row < screen_rows);
+            assert(column >= viewport.viewport_column);
+            assert(column - viewport.viewport_column < screen_columns);
+        }
+    }
+
+    /* Moving back toward the document origin scrolls both axes back. */
+    assert(viewport_ensure_cursor_visible(&viewport, 0, 0,
+                                          screen_rows, screen_columns));
+    assert(viewport.viewport_row == 0);
+    assert(viewport.viewport_column == 0);
+
+    /* The last visible cell does not force an unnecessary scroll. */
+    assert(viewport_ensure_cursor_visible(&viewport, 2, 3,
+                                          screen_rows, screen_columns));
+    assert(viewport.viewport_row == 0);
+    assert(viewport.viewport_column == 0);
+
+    /* One position beyond the bottom-right visible cell scrolls by one. */
+    assert(viewport_ensure_cursor_visible(&viewport, 3, 4,
+                                          screen_rows, screen_columns));
+    assert(viewport.viewport_row == 1);
+    assert(viewport.viewport_column == 1);
+}
+
+static void test_renderer_uses_viewport_offsets(void)
+{
+    EditorState state;
+    Renderer renderer;
+    int output_pipe[2];
+    int saved_stdout;
+    char output[2048];
+    ssize_t output_length;
+    const ScreenCell *cell;
+
+    assert(editor_state_init(&state));
+    assert(document_insert_character(&state.document, 0, 0, 'a'));
+    assert(document_insert_character(&state.document, 0, 1, 'b'));
+    assert(document_insert_character(&state.document, 0, 2, 'c'));
+    assert(document_split_line(&state.document, 0, 3));
+    assert(document_insert_character(&state.document, 1, 0, 'd'));
+    assert(document_insert_character(&state.document, 1, 1, 'e'));
+    assert(document_insert_character(&state.document, 1, 2, 'f'));
+    assert(document_insert_character(&state.document, 1, 3, 'g'));
+    assert(document_insert_character(&state.document, 1, 4, 'h'));
+    assert(cursor_set_position(&state.cursor, &state.document, 1, 3));
+    assert(viewport_ensure_cursor_visible(&state.viewport, 1, 3, 2, 3));
+    assert(state.viewport.viewport_row == 0);
+    assert(state.viewport.viewport_column == 1);
+
+    /* Force a vertical offset too, as if the document had been scrolled. */
+    state.viewport.viewport_row = 1;
+    state.viewport.viewport_column = 2;
+
+    assert(renderer_init(&renderer, 2, 3));
+    assert(pipe(output_pipe) == 0);
+    saved_stdout = dup(STDOUT_FILENO);
+    assert(saved_stdout >= 0);
+    assert(dup2(output_pipe[1], STDOUT_FILENO) == STDOUT_FILENO);
+    close(output_pipe[1]);
+
+    assert(renderer_render(&renderer, &state));
+
+    assert(dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
+    close(saved_stdout);
+    output_length = read(output_pipe[0], output, sizeof(output) - 1);
+    assert(output_length >= 0);
+    output[output_length] = '\0';
+    close(output_pipe[0]);
+
+    cell = screen_buffer_get(&renderer.screen_buffer, 0, 0);
+    assert(cell != NULL && cell->character == 'f');
+    cell = screen_buffer_get(&renderer.screen_buffer, 0, 1);
+    assert(cell != NULL && cell->character == 'g');
+    cell = screen_buffer_get(&renderer.screen_buffer, 0, 2);
+    assert(cell != NULL && cell->character == 'h');
+    assert(strstr(output, "\x1b[1;2H") != NULL);
+
+    renderer_destroy(&renderer);
+    editor_state_destroy(&state);
+}
+
+static void test_renderer_rejects_cursor_outside_viewport(void)
+{
+    EditorState state;
+    Renderer renderer;
+
+    assert(editor_state_init(&state));
+    assert(renderer_init(&renderer, 3, 4));
+
+    state.viewport.viewport_row = 1;
+    assert(!renderer_render(&renderer, &state));
+
+    state.viewport.viewport_row = 0;
+    state.viewport.viewport_column = 1;
+    assert(!renderer_render(&renderer, &state));
+
+    renderer_destroy(&renderer);
+    editor_state_destroy(&state);
+}
+
+static void test_cursor_and_viewport_remain_synchronized_during_scrolling(void)
+{
+    EditorState state;
+    const size_t visible_rows = 8;
+    const size_t visible_columns = 10;
+    size_t row;
+    size_t column;
+
+    assert(editor_state_init(&state));
+
+    /* Create forty logical lines, including the final empty line. */
+    for (row = 0; row < 39; ++row)
+    {
+        const DocumentLine *line = document_get_line(&state.document, row);
+        assert(line != NULL);
+        assert(document_split_line(&state.document, row, line->length));
+    }
+
+    assert(cursor_set_position(&state.cursor, &state.document, 0, 0));
+    for (row = 1; row < state.document.line_count; ++row)
+    {
+        assert(cursor_move_down(&state.cursor, &state.document));
+        assert(viewport_ensure_cursor_visible(&state.viewport,
+                                              state.cursor.row,
+                                              state.cursor.column,
+                                              visible_rows,
+                                              visible_columns));
+        assert(state.cursor.row - state.viewport.viewport_row < visible_rows);
+    }
+
+    for (row = state.document.line_count - 1; row > 0; --row)
+    {
+        assert(cursor_move_up(&state.cursor, &state.document));
+        assert(viewport_ensure_cursor_visible(&state.viewport,
+                                              state.cursor.row,
+                                              state.cursor.column,
+                                              visible_rows,
+                                              visible_columns));
+        assert(state.cursor.row >= state.viewport.viewport_row);
+        assert(state.cursor.row - state.viewport.viewport_row < visible_rows);
+    }
+    assert(state.cursor.row == 0);
+    assert(state.viewport.viewport_row == 0);
+
+    /* Exercise horizontal scrolling on one line longer than the viewport. */
+    for (column = 0; column < 100; ++column)
+    {
+        assert(document_insert_character(&state.document, 0, column, 'x'));
+    }
+    assert(cursor_set_position(&state.cursor, &state.document, 0, 0));
+
+    for (column = 0; column < 100; ++column)
+    {
+        assert(cursor_move_right(&state.cursor, &state.document));
+        assert(viewport_ensure_cursor_visible(&state.viewport,
+                                              state.cursor.row,
+                                              state.cursor.column,
+                                              visible_rows,
+                                              visible_columns));
+        assert(state.cursor.column >= state.viewport.viewport_column);
+        assert(state.cursor.column - state.viewport.viewport_column < visible_columns);
+    }
+
+    while (state.cursor.column > 0)
+    {
+        assert(cursor_move_left(&state.cursor));
+        assert(viewport_ensure_cursor_visible(&state.viewport,
+                                              state.cursor.row,
+                                              state.cursor.column,
+                                              visible_rows,
+                                              visible_columns));
+        assert(state.cursor.column >= state.viewport.viewport_column);
+        assert(state.cursor.column - state.viewport.viewport_column < visible_columns);
+    }
+    assert(state.viewport.viewport_column == 0);
+
+    editor_state_destroy(&state);
+}
+
+static void test_terminal_disables_and_restores_autowrap(void)
+{
+    TerminalState terminal = {0};
+    int output_pipe[2];
+    int saved_stdout;
+    char output[128];
+    ssize_t output_length;
+
+    assert(pipe(output_pipe) == 0);
+    saved_stdout = dup(STDOUT_FILENO);
+    assert(saved_stdout >= 0);
+    assert(dup2(output_pipe[1], STDOUT_FILENO) == STDOUT_FILENO);
+    close(output_pipe[1]);
+
+    assert(terminal_enter_alternate_screen(&terminal));
+    assert(terminal.autowrap_disabled);
+    terminal_leave_alternate_screen(&terminal);
+    assert(!terminal.autowrap_disabled);
+    assert(!terminal.alternate_screen_enabled);
+
+    assert(dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
+    close(saved_stdout);
+    output_length = read(output_pipe[0], output, sizeof(output) - 1);
+    assert(output_length >= 0);
+    output[output_length] = '\0';
+    close(output_pipe[0]);
+
+    assert(strstr(output, "\x1b[?1049h") != NULL);
+    assert(strstr(output, "\x1b[?7l") != NULL);
+    assert(strstr(output, "\x1b[?7h") != NULL);
+    assert(strstr(output, "\x1b[?1049l") != NULL);
+}
+
+static void test_viewport_invalid_dimensions_preserve_offsets(void)
+{
+    Viewport viewport;
+
+    viewport_init(&viewport);
+    assert(viewport_ensure_cursor_visible(&viewport, 8, 9, 3, 4));
+    assert(viewport.viewport_row == 6);
+    assert(viewport.viewport_column == 6);
+
+    assert(!viewport_ensure_cursor_visible(&viewport, 0, 0, 0, 4));
+    assert(!viewport_ensure_cursor_visible(&viewport, 0, 0, 3, 0));
+    assert(viewport.viewport_row == 6);
+    assert(viewport.viewport_column == 6);
+}
+
 static void test_viewport_rejects_invalid_dimensions(void)
 {
     Viewport viewport;
@@ -273,7 +517,6 @@ static void test_viewport_rejects_invalid_dimensions(void)
     assert(!viewport_ensure_cursor_visible(NULL, 0, 0, 5, 5));
 }
 
-/* Runs every unit test; any failing assert() aborts with a non-zero status. */
 int main(void)
 {
     test_document_insert_and_delete();
@@ -285,6 +528,12 @@ int main(void)
     test_document_merge_lines();
     test_line_editing_cursor_transitions();
     test_viewport_tracks_cursor_visibility();
+    test_viewport_repeated_scrolling_and_screen_boundaries();
+    test_renderer_uses_viewport_offsets();
+    test_renderer_rejects_cursor_outside_viewport();
+    test_cursor_and_viewport_remain_synchronized_during_scrolling();
+    test_terminal_disables_and_restores_autowrap();
+    test_viewport_invalid_dimensions_preserve_offsets();
     test_viewport_rejects_invalid_dimensions();
 
     return 0;

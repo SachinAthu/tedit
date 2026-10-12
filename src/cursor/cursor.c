@@ -70,6 +70,7 @@ bool cursor_set_position(Cursor *cursor, const Document *document, size_t row, s
  */
 bool cursor_advance(Cursor *cursor, const Document *document)
 {
+    const DocumentLine *line;
 
     if (cursor == NULL || document == NULL ||
         cursor->row >= document->line_count)
@@ -77,7 +78,7 @@ bool cursor_advance(Cursor *cursor, const Document *document)
         return false;
     }
 
-    const DocumentLine *line = &document->lines[cursor->row];
+    line = &document->lines[cursor->row];
 
     if (cursor->column >= line->length)
     {
@@ -109,7 +110,6 @@ bool cursor_move_left(Cursor *cursor)
 
     cursor->column -= 1;
     cursor->preferred_column = cursor->column;
-
     return true;
 }
 
@@ -127,14 +127,14 @@ bool cursor_move_left(Cursor *cursor)
  */
 bool cursor_move_right(Cursor *cursor, const Document *document)
 {
+    const DocumentLine *line;
 
     if (cursor == NULL || document == NULL || cursor->row >= document->line_count)
     {
         return false;
     }
 
-    const DocumentLine *line = &document->lines[cursor->row];
-
+    line = &document->lines[cursor->row];
     if (cursor->column >= line->length)
     {
         return false;
@@ -142,78 +142,52 @@ bool cursor_move_right(Cursor *cursor, const Document *document)
 
     cursor->column += 1;
     cursor->preferred_column = cursor->column;
+    return true;
+}
+
+/* Move vertically while preserving the preferred logical column. */
+static bool cursor_move_vertical(Cursor *cursor, const Document *document,
+                                 size_t target_row)
+{
+    const DocumentLine *target_line;
+
+    if (cursor == NULL || document == NULL ||
+        target_row >= document->line_count)
+    {
+        return false;
+    }
+
+    target_line = &document->lines[target_row];
+    cursor->row = target_row;
+    cursor->column = cursor->preferred_column;
+
+    if (cursor->column > target_line->length)
+    {
+        cursor->column = target_line->length;
+    }
 
     return true;
 }
 
-/*
- * Move the cursor up one row, keeping its column if possible.
- *
- * When the cursor lands on a shorter line, its column is clamped to the end
- * of that line. The "preferred" column is remembered so that moving back down
- * restores the original horizontal position.
- *
- * Parameters:
- *   cursor   - the cursor to move.
- *   document - the document the cursor refers to.
- *
- * Returns:
- *   true if the cursor moved up, false if `cursor` or `document` is NULL, the
- *   current row is out of range, or the cursor is already on the first row.
- */
 bool cursor_move_up(Cursor *cursor, const Document *document)
 {
-    if (cursor == NULL || document == NULL || cursor->row >= document->line_count || cursor->row == 0)
+    if (cursor == NULL || document == NULL || cursor->row == 0 ||
+        cursor->row >= document->line_count)
     {
         return false;
     }
 
-    const size_t target_row = cursor->row - 1;
-    const DocumentLine *target_line = &document->lines[target_row];
-
-    cursor->row = target_row;
-    cursor->column = cursor->preferred_column;
-
-    if (cursor->column > target_line->length)
-    {
-        cursor->column = target_line->length;
-    }
-
-    return true;
+    return cursor_move_vertical(cursor, document, cursor->row - 1);
 }
 
-/*
- * Move the cursor down one row, keeping its column if possible.
- *
- * This is the counterpart to cursor_move_up(). When the cursor lands on a
- * shorter line its column is clamped to that line's end, and the preferred
- * column is preserved so the horizontal position survives the trip.
- *
- * Parameters:
- *   cursor   - the cursor to move.
- *   document - the document the cursor refers to.
- *
- * Returns:
- *   true if the cursor moved down, false if `cursor` or `document` is NULL,
- *   the current row is out of range, or the cursor is already on the last row.
- */
 bool cursor_move_down(Cursor *cursor, const Document *document)
 {
-    if (cursor == NULL || document == NULL || cursor->row >= document->line_count || cursor->row + 1 >= document->line_count)
+    if (cursor == NULL || document == NULL ||
+        cursor->row >= document->line_count ||
+        cursor->row + 1 >= document->line_count)
     {
         return false;
     }
 
-    const size_t target_row = cursor->row + 1;
-    const DocumentLine *target_line = &document->lines[target_row];
-
-    cursor->row = target_row;
-    cursor->column = cursor->preferred_column;
-
-    if (cursor->column > target_line->length)
-    {
-        cursor->column = target_line->length;
-    }
-
-    return true;
+    return cursor_move_vertical(cursor, document, cursor->row + 1);
 }

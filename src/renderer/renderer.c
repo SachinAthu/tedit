@@ -120,7 +120,12 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
 {
     bool success;
 
-    if (renderer == NULL || state == NULL)
+    if (renderer == NULL || state == NULL ||
+        renderer->screen_buffer.cells == NULL ||
+        state->cursor.row < state->viewport.viewport_row ||
+        state->cursor.column < state->viewport.viewport_column ||
+        state->cursor.row - state->viewport.viewport_row >= renderer->screen_buffer.rows ||
+        state->cursor.column - state->viewport.viewport_column >= renderer->screen_buffer.columns)
     {
         return false;
     }
@@ -142,7 +147,7 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
 
     if (success)
     {
-        success = renderer_write_cursor_position(state->cursor.row, state->cursor.column);
+        success = renderer_write_cursor_position(state->cursor.row - state->viewport.viewport_row, state->cursor.column - state->viewport.viewport_column);
     }
 
     /*
@@ -194,13 +199,14 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
     for (size_t screen_row = 0; screen_row < renderer->screen_buffer.rows; screen_row++)
     {
         const size_t document_row = state->viewport.viewport_row + screen_row;
+        const DocumentLine *line;
 
         if (document_row >= state->document.line_count)
         {
             break;
         }
 
-        const DocumentLine *line = &state->document.lines[document_row];
+        line = &state->document.lines[document_row];
 
         /* Horizontal scrolling maps screen columns to document columns. */
         for (size_t screen_column = 0; screen_column < renderer->screen_buffer.columns; screen_column++)

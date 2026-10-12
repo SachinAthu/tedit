@@ -238,6 +238,20 @@ bool terminal_enter_alternate_screen(TerminalState *terminal)
 
     /* Remember the switch so that leaving is only attempted when needed. */
     terminal->alternate_screen_enabled = true;
+
+    /*
+     * Full-width redraws must not trigger the terminal's delayed-wrap mode.
+     * Otherwise, writing the last cell can leave a pending wrap that causes
+     * the physical screen to scroll independently of the editor's Viewport.
+     */
+    if (!terminal_write_all("\x1b[?7l", 5))
+    {
+        (void)terminal_write_all("\x1b[?1049l", 8);
+        terminal->alternate_screen_enabled = false;
+        return false;
+    }
+
+    terminal->autowrap_disabled = true;
     return true;
 }
 
@@ -261,6 +275,13 @@ void terminal_leave_alternate_screen(TerminalState *terminal)
     if (!terminal->alternate_screen_enabled)
     {
         return;
+    }
+
+    /* Restore terminal wrapping before returning to the user's screen. */
+    if (terminal->autowrap_disabled)
+    {
+        (void)terminal_write_all("\x1b[?7h", 5);
+        terminal->autowrap_disabled = false;
     }
 
     /* "\x1b[?1049l" is the escape sequence that leaves the alternate screen. */
