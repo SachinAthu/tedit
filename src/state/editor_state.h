@@ -7,12 +7,14 @@
 
 #include <stdbool.h>
 
+/* The top-level state of the editor: the document being edited, the cursor,
+ * the scroll position, and a flag marking whether there are unsaved changes. */
 typedef struct
 {
-    Document document;
-    Cursor cursor;
-    Viewport viewport;
-    bool is_dirty;
+    Document document;   /* The text being edited. */
+    Cursor cursor;       /* The current cursor position within the document. */
+    Viewport viewport;   /* The screen's scroll offset. */
+    bool is_dirty;       /* True when the document has unsaved changes. */
 } EditorState;
 
 bool editor_state_init(EditorState *state);

@@ -1,11 +1,19 @@
 #include "document/document.h"
 #include "cursor/cursor.h"
 #include "state/editor_state.h"
-#include "viewport.h"
+#include "viewport/viewport.h"
 
 #include <assert.h>
 #include <string.h>
 
+/*
+ * Unit tests for the core editing model: the document, the cursor, and the
+ * viewport. Each test builds a small document in memory, performs an editing
+ * operation, and uses assert() to verify the result. Tests run from main()
+ * below and do not need a terminal.
+ */
+
+/* Verifies inserting and deleting characters keeps the line contents correct. */
 static void test_document_insert_and_delete(void)
 {
     Document document;
@@ -33,6 +41,7 @@ static void test_document_insert_and_delete(void)
     document_destroy(&document);
 }
 
+/* Verifies left/right cursor movement stays within the line's bounds. */
 static void test_cursor_horizontal_movement(void)
 {
     Document document;
@@ -58,6 +67,7 @@ static void test_cursor_horizontal_movement(void)
     document_destroy(&document);
 }
 
+/* Verifies moving up/down clamps the column but remembers the preferred column. */
 static void test_cursor_vertical_movement_preserves_preferred_column(void)
 {
     Document document;
@@ -105,6 +115,7 @@ static void test_cursor_vertical_movement_preserves_preferred_column(void)
     document_destroy(&document);
 }
 
+/* Verifies horizontal movement resets the preferred column to the actual column. */
 static void test_horizontal_movement_resets_preferred_column(void)
 {
     Document document;
@@ -126,6 +137,7 @@ static void test_horizontal_movement_resets_preferred_column(void)
     document_destroy(&document);
 }
 
+/* Verifies the editor state starts clean (not dirty) and the flag can be set. */
 static void test_dirty_flag_initial_state(void)
 {
     EditorState state;
@@ -137,6 +149,7 @@ static void test_dirty_flag_initial_state(void)
     editor_state_destroy(&state);
 }
 
+/* Verifies splitting a line moves the suffix into a new line below the prefix. */
 static void test_document_split_line(void)
 {
     Document document;
@@ -171,6 +184,7 @@ static void test_document_split_line(void)
     document_destroy(&document);
 }
 
+/* Verifies merging two lines joins the second line's text onto the first. */
 static void test_document_merge_lines(void)
 {
     Document document;
@@ -194,6 +208,7 @@ static void test_document_merge_lines(void)
     document_destroy(&document);
 }
 
+/* Verifies the cursor and document stay in sync across split and merge edits. */
 static void test_line_editing_cursor_transitions(void)
 {
     EditorState state;
@@ -225,6 +240,7 @@ static void test_line_editing_cursor_transitions(void)
     editor_state_destroy(&state);
 }
 
+/* Verifies the viewport scrolls only as much as needed to keep the cursor visible. */
 static void test_viewport_tracks_cursor_visibility(void)
 {
     Viewport viewport;
@@ -246,6 +262,7 @@ static void test_viewport_tracks_cursor_visibility(void)
     assert(viewport.viewport_column == 1);
 }
 
+/* Verifies the viewport rejects NULL input and zero screen dimensions. */
 static void test_viewport_rejects_invalid_dimensions(void)
 {
     Viewport viewport;
@@ -256,6 +273,7 @@ static void test_viewport_rejects_invalid_dimensions(void)
     assert(!viewport_ensure_cursor_visible(NULL, 0, 0, 5, 5));
 }
 
+/* Runs every unit test; any failing assert() aborts with a non-zero status. */
 int main(void)
 {
     test_document_insert_and_delete();

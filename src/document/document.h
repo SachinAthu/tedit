@@ -4,18 +4,20 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* One line of text. The characters are stored in a buffer that grows as needed. */
 typedef struct
 {
-    char *data;
-    size_t length;
-    size_t capacity;
+    char *data;     /* The buffer holding this line's characters. */
+    size_t length;  /* How many characters are currently stored. */
+    size_t capacity;/* How many characters `data` can hold without growing. */
 } DocumentLine;
 
+/* The whole document: an ordered list of lines, plus bookkeeping for growth. */
 typedef struct
 {
-    DocumentLine *lines;
-    size_t line_count;
-    size_t line_capacity;
+    DocumentLine *lines;       /* Array of lines; lines[0] is the first line. */
+    size_t line_count;         /* How many lines currently exist. */
+    size_t line_capacity;      /* How many lines `lines` can hold without growing. */
 } Document;
 
 bool document_init(Document *document);

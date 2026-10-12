@@ -325,6 +325,22 @@ bool document_delete_character(Document *document, size_t row, size_t column)
     return true;
 }
 
+/*
+ * Split one line into two at the given column, as if the user pressed Enter.
+ *
+ * Everything from `column` onward is moved into a brand-new line inserted
+ * directly below the original, and the original line is shortened to end at
+ * the split point.
+ *
+ * Parameters:
+ *   document - the document to modify.
+ *   row      - the zero-based index of the line to split.
+ *   column   - the zero-based position to split at (0 to line length).
+ *
+ * Returns:
+ *   true on success, false if the line does not exist, `column` is past the
+ *   end of the line, or an allocation fails.
+ */
 bool document_split_line(Document *document, size_t row, size_t column)
 {
     DocumentLine *line = document_get_line(document, row);
@@ -385,6 +401,21 @@ bool document_split_line(Document *document, size_t row, size_t column)
     return true;
 }
 
+/*
+ * Join the line at `row` with the line directly below it, as if the user
+ * pressed Backspace at the start of the lower line.
+ *
+ * The second line's text is appended to the end of the first line, the second
+ * line's buffer is freed, and the remaining lines shift up to close the gap.
+ *
+ * Parameters:
+ *   document - the document to modify.
+ *   row      - the zero-based index of the upper line to merge into.
+ *
+ * Returns:
+ *   true on success, false if `document` is NULL, `row` has no line after it,
+ *   the combined length would overflow, or a reallocation fails.
+ */
 bool document_merge_lines(Document *document, size_t row)
 {
     if (document == NULL || row >= document->line_count || row + 1 >= document->line_count)

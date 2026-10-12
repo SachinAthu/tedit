@@ -146,6 +146,21 @@ bool cursor_move_right(Cursor *cursor, const Document *document)
     return true;
 }
 
+/*
+ * Move the cursor up one row, keeping its column if possible.
+ *
+ * When the cursor lands on a shorter line, its column is clamped to the end
+ * of that line. The "preferred" column is remembered so that moving back down
+ * restores the original horizontal position.
+ *
+ * Parameters:
+ *   cursor   - the cursor to move.
+ *   document - the document the cursor refers to.
+ *
+ * Returns:
+ *   true if the cursor moved up, false if `cursor` or `document` is NULL, the
+ *   current row is out of range, or the cursor is already on the first row.
+ */
 bool cursor_move_up(Cursor *cursor, const Document *document)
 {
     if (cursor == NULL || document == NULL || cursor->row >= document->line_count || cursor->row == 0)
@@ -167,6 +182,21 @@ bool cursor_move_up(Cursor *cursor, const Document *document)
     return true;
 }
 
+/*
+ * Move the cursor down one row, keeping its column if possible.
+ *
+ * This is the counterpart to cursor_move_up(). When the cursor lands on a
+ * shorter line its column is clamped to that line's end, and the preferred
+ * column is preserved so the horizontal position survives the trip.
+ *
+ * Parameters:
+ *   cursor   - the cursor to move.
+ *   document - the document the cursor refers to.
+ *
+ * Returns:
+ *   true if the cursor moved down, false if `cursor` or `document` is NULL,
+ *   the current row is out of range, or the cursor is already on the last row.
+ */
 bool cursor_move_down(Cursor *cursor, const Document *document)
 {
     if (cursor == NULL || document == NULL || cursor->row >= document->line_count || cursor->row + 1 >= document->line_count)

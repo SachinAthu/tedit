@@ -14,11 +14,17 @@
  * A #define is a text replacement: everywhere CONTROL_Q appears, the compiler
  * substitutes 0x11. Using a name instead of a bare number makes it readable. */
 #define CONTROL_Q 0x11
+/* 0x7F is the "Delete" key, which most terminals send for Backspace. */
 #define BACKSPACE 0x7F
+/* 0x08 is Ctrl-H, an older/alternative Backspace code. */
 #define BACKSPACE_ALT 0x08
+/* 0x1B is the ESC key, which starts arrow-key and other escape sequences. */
 #define ESCAPE 0x1B
+/* How long (in microseconds) to wait for the rest of an escape sequence. */
 #define ESCAPE_TIMEOUT 50000
+/* 0x0D is the carriage return the terminal sends when Enter is pressed. */
 #define ENTER 0x0D
+/* 0x0A is a line feed, accepted as Enter for convenience. */
 #define LINE_FEED 0x0A
 
 /*
@@ -68,6 +74,22 @@ static bool get_terminal_size(size_t *rows, size_t *columns)
     return true;
 }
 
+/*
+ * Read one more byte from the keyboard, but only if it arrives quickly.
+ *
+ * Arrow keys are not a single byte: the terminal sends an escape sequence
+ * like "\x1b[A" (ESC, '[', 'A'). After seeing the ESC byte, we call this to
+ * grab the next byte. We use select() to wait at most ESCAPE_TIMEOUT, so that
+ * a lone ESC key press (no bytes following) is not mistaken for an arrow key.
+ *
+ * Parameters:
+ *   byte - Out-parameter: receives the byte read from the keyboard.
+ *
+ * Returns:
+ *   1  - one byte was read into `byte`.
+ *   0  - no byte arrived within the timeout.
+ *   -1 - reading failed for a reason other than a signal interruption.
+ */
 static int read_escape_byte(unsigned char *byte)
 {
     fd_set read_set;
@@ -110,6 +132,21 @@ static int read_escape_byte(unsigned char *byte)
     }
 }
 
+/*
+ * Redraw the screen after the cursor or document has changed.
+ *
+ * Editing commands all end the same way: make sure the cursor is still on
+ * screen (scrolling if needed), then repaint. This helper does both so the
+ * main loop does not repeat the code.
+ *
+ * Parameters:
+ *   renderer - the renderer used to draw the screen; must not be NULL.
+ *   state    - the current editor state (document + cursor); must not be NULL.
+ *
+ * Returns:
+ *   true if the cursor was kept visible and the frame was drawn, false if
+ *   either pointer is NULL or one of those steps failed.
+ */
 static bool redraw_after_action(Renderer *renderer, const EditorState *state)
 {
     if (renderer == NULL || state == NULL)
@@ -177,6 +214,11 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
             return true;
         }
 
+        /* An ESC byte starts an escape sequence, e.g. "\x1b[D" means Left.
+         * Arrow keys arrive as ESC followed by '[' and a direction letter:
+         *   D = Left, C = Right, A = Up, B = Down.
+         * Read the two following bytes; if they do not form such a sequence,
+         * ignore the input and go back to waiting for the next key. */
         if (input == ESCAPE)
         {
             unsigned char first;
@@ -206,6 +248,7 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
                 moved = cursor_move_down(&state->cursor, &state->document);
             }
 
+            /* Only repaint if the cursor actually moved. */
             if (moved && !redraw_after_action(renderer, state))
             {
                 return false;
@@ -214,6 +257,8 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
             continue;
         }
 
+        /* Backspace deletes the character before the cursor. If the cursor is
+         * at the start of a line, it merges that line into the one above. */
         if (input == BACKSPACE || input == BACKSPACE_ALT)
         {
             if (state->cursor.column > 0)
@@ -263,6 +308,8 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
             continue;
         }
 
+        /* Enter splits the current line at the cursor and moves the cursor to
+         * the start of the newly created line below it. */
         if (input == ENTER || input == LINE_FEED)
         {
             if (!document_split_line(&state->document, state->cursor.row, state->cursor.column))

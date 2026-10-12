@@ -6,11 +6,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/* The cursor's position within the document. All coordinates are zero-based. */
 typedef struct
 {
-    size_t row;
-    size_t column;
-    size_t preferred_column;
+    size_t row;              /* Which line the cursor is on. */
+    size_t column;           /* Which character position within that line. */
+    size_t preferred_column; /* The column to return to when moving up or down. */
 } Cursor;
 
 void cursor_init(Cursor *cursor);
