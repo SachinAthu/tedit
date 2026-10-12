@@ -6,11 +6,11 @@ Terminal text editor implementation in C99 for Linux/POSIX, developed incrementa
 
 ## Current Milestone
 
-**Chapter 48 — Working with Lines: implemented and verified**
+**Chapter 49 — Navigating the Document: complete for the current ASCII-only scope**
 
-Chapter 48 adds logical-line splitting and merging to the existing editor. Enter (`0x0D`) and line feed (`0x0A`) split the current logical line at the Cursor. Backspace deletes the preceding character when the Cursor is inside a line; at column zero, it merges the current line into the previous line when one exists. The Cursor and Dirty Flag are updated after successful edits, and the screen is redrawn.
+Chapters 48 and 49 so far add logical-line splitting and merging, vertical Cursor movement with preferred-column preservation, and a two-offset Viewport for vertical and horizontal scrolling. The Renderer now draws the visible document region, and the event loop maintains Cursor visibility before redrawing. Enter (`0x0D`) and line feed (`0x0A`) split the current logical line at the Cursor. Backspace deletes the preceding character when the Cursor is inside a line; at column zero, it merges the current line into the previous line when one exists. The Cursor and Dirty Flag are updated after successful edits, and the screen is redrawn.
 
-The user has confirmed that the editor builds, works in the terminal, and all tests pass. The current registered CTest targets are `smoke` and `editing`.
+The build and registered CTest targets (`smoke` and `editing`) pass. Manual testing in WSL exposed two terminal-edge defects. First, full-width frame writes could interact with terminal auto-wrap and make the physical screen drift from the logical Viewport. The terminal runtime now disables auto-wrap while the editor is active and restores it during cleanup, and the Renderer validates Cursor coordinates before emitting terminal positioning sequences. Second, horizontal scrolling could make the application exit when a line reached the terminal's right edge. The application now initializes the Renderer with `columns - 1`, reserving the terminal's final physical column. The user confirmed that the horizontal edge issue is fixed in WSL. Regression tests cover repeated vertical/horizontal scrolling, invalid Renderer Cursor coordinates, and terminal-mode restoration.
 
 ## Completed
 
@@ -52,10 +52,11 @@ The user has confirmed that the editor builds, works in the terminal, and all te
 
 #### Cursor
 
-- Cursor stores zero-based logical row and column coordinates.
+- Cursor stores zero-based logical row and column coordinates plus a preferred column.
 - Cursor initialization places it at the beginning of the Document.
-- Cursor position assignment validates the target row and column.
-- Cursor advancement supports character insertion.
+- Cursor position assignment validates the target row and column and synchronizes the preferred column.
+- Cursor advancement supports character insertion and synchronizes the preferred column.
+- Up and Down movement preserve the preferred column while clamping the actual column to the destination line.
 - Cursor operations are implemented in the `cursor` module.
 
 #### Editor State
@@ -78,7 +79,9 @@ The user has confirmed that the editor builds, works in the terminal, and all te
 #### Renderer
 
 - Renderer constructs a complete frame from the current Editor State.
-- Document characters are copied into the visible Screen Buffer.
+- The Screen Buffer is initialized one column narrower than the detected terminal width, reserving the terminal's final physical column to avoid right-edge pending-wrap behavior.
+- Document characters are copied into the visible Screen Buffer using the Viewport offsets.
+- Vertical and horizontal scrolling expose a different portion of the document without changing the Document.
 - Content beyond the current screen dimensions is clipped.
 - Terminal output uses ANSI cursor-positioning sequences.
 - The terminal text cursor is hidden during frame rendering and restored afterward.
@@ -116,8 +119,8 @@ The user has confirmed that the editor builds, works in the terminal, and all te
 - Printable ASCII characters are inserted at the current Cursor position.
 - The Cursor advances after successful insertion.
 - Backspace is recognized as byte `0x7F` or `0x08`.
-- Left and Right Arrow input is recognized using the current basic `ESC [` sequence handling.
-- Successful movement and text edits trigger a full redraw.
+- Left, Right, Up, and Down Arrow input is recognized using the current basic `ESC [` sequence handling.
+- Successful movement and text edits update Cursor visibility through the Viewport and trigger a full redraw.
 - Unsupported control characters and non-ASCII input bytes are ignored.
 - Input handling remains temporarily inside `main.c`; the final Input Handler, Input Parser, Input Engine, and Command Engine architecture has not yet been integrated.
 
@@ -142,12 +145,27 @@ The user has confirmed that the editor builds, works in the terminal, and all te
 - After a successful merge, the Cursor moves to the previous line's former end position.
 - Backspace at the beginning of the first line is a no-op.
 - Successful line splitting, line merging, insertion, and deletion set `is_dirty` to `true` and trigger a redraw.
+
+### Chapter 49 — Navigation and Viewport (complete for current ASCII-only scope)
+
+- Cursor Up and Down use preferred-column behavior.
+- `Viewport` stores `viewport_row` and `viewport_column` offsets.
+- `viewport_ensure_cursor_visible()` adjusts both offsets to keep the Cursor within the Screen Buffer dimensions.
+- Renderer maps screen coordinates to document coordinates using the Viewport offsets.
+- The event loop updates the Viewport before redraws, including after insertion and Cursor movement.
+- The previous terminal-width insertion restriction has been removed; horizontal scrolling now exposes later columns.
+- The Screen Buffer uses `terminal_columns - 1` columns. The terminal's final physical column is intentionally reserved to avoid the right-edge behavior observed in WSL.
+- Terminal auto-wrap is disabled during the editor session and restored during cleanup.
+- Renderer cursor positioning is rejected when the Cursor lies outside the visible Screen Buffer, avoiding invalid screen-relative coordinate calculations.
+- The current implementation accepts printable ASCII only, so logical and visual columns coincide. Tab expansion and Unicode display-width mapping are not yet implemented.
 - Failed line operations do not proceed with Cursor or Dirty Flag updates.
 
 #### Tests
 
-- The `editing` test target covers Document editing, invalid operations, horizontal Cursor boundaries, line splitting, line merging, empty-line behavior, and line-editing Cursor transitions.
-- The `smoke` test target remains registered and passes.
+- The `editing` test target covers Document editing, invalid operations, horizontal and vertical Cursor boundaries, preferred-column restoration, line splitting, line merging, empty-line behavior, and Cursor transitions after line edits.
+- Viewport tests cover repeated vertical and horizontal scrolling, screen-boundary positions, invalid dimensions, and preservation of offsets on invalid calls.
+- A Renderer integration test verifies that visible cells use Viewport offsets and that the terminal Cursor position is relative to the visible area.
+- Both registered CTest targets (`smoke` and `editing`) pass.
 
 ## Current Runtime
 
@@ -191,6 +209,9 @@ Interactive Event Loop
       |                                 Set Dirty Flag
       |                                      |
       |                                      v
+      |                              Ensure Cursor Visible
+      |                                      |
+      |                                      v
       |                                 Render Frame
       |
       +---- Enter / Line Feed ----------> Split Current Line
@@ -200,6 +221,9 @@ Interactive Event Loop
       |                                      |
       |                                      v
       |                                 Set Dirty Flag
+      |                                      |
+      |                                      v
+      |                              Ensure Cursor Visible
       |                                      |
       |                                      v
       |                                 Render Frame
@@ -213,9 +237,17 @@ Interactive Event Loop
       |                                 Set Dirty Flag
       |                                      |
       |                                      v
+      |                              Ensure Cursor Visible
+      |                                      |
+      |                                      v
       |                                 Render Frame
       |
       +---- Left / Right Arrow ---------> Move Cursor Within Line
+      |                                      |
+      +---- Up / Down Arrow ------------> Move Cursor Between Lines
+      |                                      |
+      |                                      v
+      |                              Ensure Cursor Visible
       |                                      |
       |                                      v
       |                                 Render if moved
@@ -244,6 +276,8 @@ If initialization fails, the application skips the event loop and cleans up only
 tedit-main/
 ├── src/
 │   ├── main.c
+│   ├── viewport.c
+│   ├── viewport.h
 │   ├── terminal/
 │   │   ├── terminal.c
 │   │   └── terminal.h
@@ -264,8 +298,6 @@ tedit-main/
 ├── tests/
 │   ├── test_smoke.c
 │   └── test_editing.c
-├── docs/
-│   └── chapter-48.md
 ├── context/
 ├── CMakeLists.txt
 └── README.md
@@ -275,16 +307,15 @@ tedit-main/
 
 ### Build and Automated Tests
 
-The user reports that the current Chapter 48 repository builds successfully, the editor works in the terminal, and all tests pass.
-
-- CMake configuration and build succeeded.
+- CMake configuration and build succeeded for the current Chapter 49 implementation.
 - `tedit`, `test_smoke`, and `test_editing` build targets succeeded.
 - CTest passed both registered tests: `smoke` and `editing`.
-- The `editing` test covers line splitting and merging, boundary cases, empty-line behavior, and Cursor transitions in addition to the earlier editing checks.
+- The `editing` test covers line splitting and merging, Cursor boundaries and preferred-column behavior, Viewport scrolling, invalid dimensions, and Renderer/Viewport integration.
+- Controlled pseudo-terminal checks exercised vertical and horizontal scrolling, including long lines, without the application exiting.
 
 ### Manual Verification
 
-The user has confirmed that the editor builds and works correctly in the terminal after Chapter 48. This includes successful interactive operation at the milestone level. The project still needs broader end-to-end and failure-path validation during the later hardening milestone.
+The user confirmed that vertical scrolling works after the auto-wrap and Cursor-coordinate fix. A further defect in WSL caused the application to close when a line reached the terminal's right edge. Reserving the terminal's final physical column fixed that issue; the user confirmed that the horizontal scrolling issue is now resolved. Broader end-to-end and failure-path validation remains part of later hardening.
 
 ## Architectural Boundaries
 
@@ -293,7 +324,8 @@ The user has confirmed that the editor builds and works correctly in the termina
 - **Cursor:** logical editing position and horizontal movement within a line.
 - **Editor State:** ownership and coordination of the Document and Cursor, including the Dirty Flag.
 - **Screen Buffer:** in-memory representation of the visible frame.
-- **Renderer:** frame construction and terminal output; it remains a read-only consumer of Editor State.
+- **Viewport:** tracks the first visible document row and visual column and adjusts offsets to keep the Cursor visible.
+- **Renderer:** frame construction and terminal output; it remains a read-only consumer of Editor State and uses Viewport offsets when drawing the visible region.
 - **Application Event Loop:** temporary direct input handling and coordination of editing, Cursor movement, Dirty Flag updates, and rendering.
 
 The Screen Buffer is presentation data and does not replace the Document as the authoritative text representation.
@@ -301,24 +333,21 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 ## Known Limitations
 
 - Delete-key behavior is not implemented.
-- Cursor movement with Up and Down Arrow keys is not implemented.
-- Preferred-column behavior is not implemented.
-- Viewport management and horizontal/vertical scrolling are not implemented; insertion and visibility remain constrained by the current terminal-width behavior.
-- Interactive input supports printable ASCII only; UTF-8-aware input is not implemented.
+- Interactive input supports printable ASCII only; tab expansion and Unicode display-width mapping are not implemented.
 - File loading and saving are not implemented.
 - The Dirty Flag is not yet connected to save behavior.
-- Input Handler, Input Parser, Input Engine, and Command Engine integration is not implemented.
+- Input Handler, Input Parser, Input Engine, and Command Engine integration is not implemented; input handling remains temporarily in `main.c`.
 - Status Bar and Message Bar are not implemented.
-- Terminal resizing and frame reinitialization are not implemented.
+- Terminal resizing and Screen Buffer reinitialization are not implemented.
 - Incremental or dirty-cell rendering is not implemented.
-- Automated tests do not yet comprehensively cover Renderer behavior, terminal integration, allocation-failure paths, or end-to-end interactions.
+- Allocation-failure paths and a broader terminal-size integration matrix need additional coverage.
 
 ## Current Focus
 
-**Chapter 48 — Working with Lines is implemented and verified.** The editor builds, all registered tests pass, and the user has confirmed that the editor works in the terminal.
+**Chapter 49 — Navigating the Document is complete for the current ASCII-only scope.** The auto-wrap/Viewport synchronization fix and the WSL right-edge fix are implemented. The user confirmed that vertical and horizontal scrolling now work in the terminal. The build, registered tests, and controlled pseudo-terminal interaction checks pass.
 
 ## Next Step
 
-**Chapter 49 — Navigating the Document**
+**Chapter 50 — Opening Files**
 
-Implement vertical Cursor movement, preferred-column behavior, Viewport state, vertical and horizontal scrolling, and Cursor visibility. Continue from the current source code and preserve established module boundaries. Identify every source file that must change, explain the reason for each change, and test navigation boundaries and viewport invariants. Update this document again after Chapter 49 implementation and verification.
+Begin file loading while preserving the Document, Editor State, Cursor, Viewport, and Renderer boundaries. Keep tab expansion, Unicode display-width mapping, and terminal resize handling visible as limitations.

@@ -4,7 +4,7 @@
 
 **Active — Volume X implementation**
 
-The runtime foundation and editing milestones through Chapter 48 are complete. Chapter 48 adds logical-line splitting and merging, including Enter and Backspace behavior at line boundaries. The user confirmed that the editor builds, works in the terminal, and all registered automated tests pass.
+Chapters 45–49 are implemented for the current ASCII-only scope. Chapter 49 adds vertical Cursor movement, preferred-column behavior, Viewport state, and vertical and horizontal scrolling. The user confirmed that the project builds, registered tests pass, vertical scrolling works, and the horizontal-edge crash has been fixed in WSL.
 
 ## Completed
 
@@ -72,6 +72,20 @@ The runtime foundation and editing milestones through Chapter 48 are complete. C
 - [x] Editing tests cover splitting, merging, empty lines, invalid operations, and Cursor transitions
 - [x] User confirmed the editor builds and works in the terminal and all tests pass
 
+### Chapter 49 — Navigating the Document
+
+- [x] Cursor vertical movement implemented for Up and Down
+- [x] Preferred-column behavior implemented and preserved across short or empty lines
+- [x] Horizontal movement and editing position changes keep preferred-column state consistent
+- [x] Viewport state added with vertical and horizontal offsets
+- [x] Cursor visibility maintained as the Viewport scrolls
+- [x] Renderer draws the visible document region using Viewport offsets
+- [x] Up and Down Arrow input integrated into the event loop
+- [x] Renderer initialization reserves the terminal's final physical column to avoid right-edge wrap behavior
+- [x] Regression tests cover navigation, Viewport boundaries, editing transitions, and rendering with offsets
+- [x] User confirmed vertical scrolling works after the fix
+- [x] User confirmed horizontal typing no longer closes the editor in WSL after reserving the final terminal column
+
 ## Current Runtime Capabilities
 
 The application can now:
@@ -84,9 +98,14 @@ The application can now:
 - insert printable ASCII characters into the Document;
 - advance the Cursor after successful insertion;
 - move the Cursor left and right within the current logical line;
+- move the Cursor up and down while preserving its preferred column;
+- maintain vertical and horizontal Viewport offsets to keep the Cursor visible;
+- render the visible document region using the Viewport offsets;
+- reserve the terminal's final physical column to avoid the observed right-edge crash in WSL;
 - delete the character before the Cursor using Backspace, or merge with the previous line when Backspace is pressed at column zero and a previous line exists;
+- split logical lines using Enter or line feed;
 - mark the Document dirty after successful insertion, deletion, line splitting, or line merging;
-- redraw the screen after editing;
+- redraw the screen after editing and navigation;
 - exit using `Ctrl-Q`;
 - clean up initialized resources and return control to the shell.
 
@@ -94,70 +113,71 @@ The application can now:
 
 ### Build and automated tests
 
-- [x] CMake configuration and build succeeded for the Chapter 48 implementation
+- [x] CMake configuration and build succeeded for the current Chapter 49 implementation
 - [x] `smoke` automated test passed
-- [x] `editing` automated test passed, including line splitting and merging cases
-- [x] User confirmed the editor builds and works in the terminal
-- [ ] Comprehensive automated tests for Document, Cursor, Screen Buffer, and Renderer
-- [ ] Integration and regression testing across failure paths
+- [x] `editing` automated test passed
+- [x] Regression tests cover repeated vertical and horizontal movement, Viewport visibility, and Renderer positioning
+- [x] User confirmed the build succeeds and registered tests pass
+- [x] User manually verified that the vertical scrolling issue is resolved
+- [x] User manually verified that typing past the right edge no longer closes the editor in WSL
+- [ ] Comprehensive automated tests across all Document, Cursor, Screen Buffer, Renderer, and terminal behaviors
+- [ ] Integration and regression testing across broader failure paths
+- [ ] Terminal resizing and frame reinitialization
 - [ ] Broader end-to-end verification during the hardening milestone
 
-The current build and registered tests pass, and the user has confirmed interactive operation. Comprehensive correctness, allocation-failure coverage, and later end-to-end hardening remain outstanding.
+The current build and registered tests pass, and the user has confirmed the two scrolling fixes in the actual WSL terminal. Comprehensive correctness, allocation-failure coverage, terminal resizing, and later end-to-end hardening remain outstanding.
 
 ## Implementation Status Summary
 
-| Area                                                        | Status                                                                              |
-| ----------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Repository and Git workflow                                 | Established                                                                         |
-| CMake and C99 configuration                                 | Established                                                                         |
-| Terminal initialization, raw mode, restoration, and cleanup | Implemented                                                                         |
-| Application lifecycle and event loop                        | Implemented; input handling remains temporary                                       |
-| Editor State                                                | Implemented                                                                         |
-| Document                                                    | Vector of logical lines; insertion, deletion, splitting, and merging implemented    |
-| Cursor                                                      | Validated position and horizontal movement within a line; vertical movement pending |
-| Screen Buffer                                               | Implemented                                                                         |
-| Renderer                                                    | Basic full-redraw implementation                                                    |
-| Printable ASCII insertion                                   | Implemented                                                                         |
-| Backspace character deletion and line merging               | Implemented                                                                         |
-| Enter and logical-line splitting                            | Implemented                                                                         |
-| Dirty Flag                                                  | Updated after successful insertion, deletion, splitting, and merging                |
-| Full document navigation                                    | Not implemented; Chapter 49 next                                                    |
-| Viewport and scrolling                                      | Not implemented; Chapter 49 next                                                    |
-| File loading                                                | Not implemented                                                                     |
-| File saving                                                 | Not implemented                                                                     |
-| Dedicated Input Parser and command pipeline                 | Not implemented; basic input recognition remains in the event loop                  |
-| Status Bar and Message Bar                                  | Not implemented                                                                     |
-| Terminal resize handling                                    | Not implemented                                                                     |
-| Automated tests                                             | `smoke` and `editing` pass; comprehensive coverage pending                          |
-| Hardening and final integration                             | Pending                                                                             |
+| Area                                                        | Status                                                                                              |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Repository and Git workflow                                 | Established                                                                                         |
+| CMake and C99 configuration                                 | Established                                                                                         |
+| Terminal initialization, raw mode, restoration, and cleanup | Implemented                                                                                         |
+| Application lifecycle and event loop                        | Implemented; input handling remains temporary                                                       |
+| Editor State                                                | Implemented                                                                                         |
+| Document                                                    | Vector of logical lines; insertion, deletion, splitting, and merging implemented                    |
+| Cursor                                                      | Validated logical position, horizontal and vertical movement, preferred-column behavior implemented |
+| Viewport                                                    | Vertical and horizontal offsets and Cursor visibility maintenance implemented                       |
+| Screen Buffer                                               | Implemented                                                                                         |
+| Renderer                                                    | Full redraw of the visible document region; reserves the final physical terminal column             |
+| Printable ASCII insertion                                   | Implemented                                                                                         |
+| Backspace character deletion and line merging               | Implemented                                                                                         |
+| Enter and logical-line splitting                            | Implemented                                                                                         |
+| Dirty Flag                                                  | Updated after successful insertion, deletion, splitting, and merging                                |
+| Full document navigation                                    | Implemented for the current ASCII-only model                                                        |
+| Viewport and scrolling                                      | Implemented; vertical and horizontal behavior manually verified in WSL                              |
+| File loading                                                | Not implemented                                                                                     |
+| File saving                                                 | Not implemented                                                                                     |
+| Dedicated Input Parser and command pipeline                 | Not implemented; basic input recognition remains in the event loop                                  |
+| Status Bar and Message Bar                                  | Not implemented                                                                                     |
+| Terminal resize handling                                    | Not implemented                                                                                     |
+| Unicode-aware input and display-width mapping               | Not implemented                                                                                     |
+| Automated tests                                             | `smoke` and `editing` pass; broader coverage pending                                                |
+| Hardening and final integration                             | Pending                                                                                             |
 
 ## Current Milestone
 
-**Chapter 48 — Working with Lines: implemented and verified**
+**Chapter 49 — Navigating the Document: implemented and verified for the current ASCII-only scope**
 
-Chapter 48 adds Document line splitting and merging. Enter and line feed split the current line at the Cursor; Backspace at column zero merges with the previous line when possible. Cursor placement, Dirty Flag updates, and redraws are coordinated in the existing event loop. The user confirmed that the editor builds and works in the terminal and all registered tests pass.
+Chapter 49 adds vertical Cursor movement with preferred-column behavior, Viewport state, and vertical and horizontal scrolling. The Renderer draws the visible document region using Viewport offsets. A WSL-specific right-edge failure was addressed by initializing the Renderer with one fewer column than the terminal reports, leaving the final physical column unused. The user confirmed that vertical scrolling and the horizontal typing crash are resolved. The current build and registered tests pass.
 
 ## Next Milestone
 
-**Chapter 49 — Navigating the Document**
+**Chapter 50 — Opening Files**
 
-Planned focus, following the established implementation sequence:
-
-- implement vertical Cursor movement across logical lines;
-- define and implement preferred-column behavior for Up and Down movement;
-- introduce or complete Viewport state and Cursor visibility handling;
-- implement vertical and horizontal scrolling as specified by the project architecture and ADRs;
-- test navigation boundaries, short and empty lines, and viewport invariants.
-
-Continue from the current source code. Preserve established module boundaries and identify every changed file before implementing the milestone.
+Continue from the current source code. Preserve established module boundaries and identify every changed file before implementing the milestone. Implement file loading through the planned File Manager boundary; do not move file-system responsibilities into the Document, Cursor, or Renderer.
 
 ## Current Limitations
 
 - Only printable ASCII characters are accepted for insertion.
-- The Delete key is not implemented.
-- Cursor movement is limited to Left and Right within a single line; vertical movement and full document navigation are not implemented.
-- Viewport-based scrolling is not implemented, and insertion is constrained by the current terminal-width behavior.
-- Input handling remains temporarily inside the application event loop rather than a dedicated Input Parser and command pipeline.
+- The terminal Delete key is not implemented; Backspace is supported.
+- UTF-8-aware input and Unicode display-width mapping are not implemented.
+- Tab expansion is not implemented.
 - File opening and saving are not implemented.
-- The Status Bar, Message Bar, and terminal resize handling are not implemented.
-- Comprehensive automated testing, failure-path regression testing, hardening, and final integration remain future work.
+- The Dirty Flag is not yet connected to a save workflow.
+- Input handling remains temporarily inside the application event loop rather than a dedicated Input Parser, Input Engine, and Command Engine pipeline.
+- The Status Bar and Message Bar are not implemented.
+- Terminal resize handling and frame reinitialization are not implemented.
+- Comprehensive automated testing, broader failure-path regression testing, hardening, and final integration remain future work.
+- The Renderer deliberately reserves the terminal's final physical column to avoid the right-edge wrapping behavior observed in WSL; this reduces the usable rendering width by one column.

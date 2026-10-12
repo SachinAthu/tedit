@@ -515,6 +515,91 @@ These are remaining scope boundaries, not claims that the corresponding features
 
 ---
 
-## Next Milestone — Chapter 49: Navigating the Document
+## Chapter 49 — Navigating the Document
 
-Continue from the verified Chapter 48 source. Implement document-wide Cursor navigation according to the established Cursor Movement Model (ADR-014): vertical movement should change the row while preserving a preferred column, with the actual column clamped to the destination line's length when necessary. Keep Viewport and scrolling work separate unless the Chapter 49 plan explicitly includes it. Preserve the existing module boundaries and add focused tests for vertical movement, short and empty destination lines, document boundaries, and preferred-column restoration.
+Chapter 49 adds document-wide navigation for the current printable-ASCII editing model. It extends the existing Cursor and Renderer behavior rather than replacing the established Document representation or full-redraw rendering pipeline.
+
+### Vertical Cursor Movement and Preferred Column
+
+The Cursor now tracks `preferred_column` in addition to its logical `row` and `column`.
+
+- Left and Right movement establish the preferred column from the new actual column.
+- Up and Down movement change the logical row while retaining the preferred column.
+- When the destination line is shorter than the preferred column, the actual column is clamped to that line's length.
+- Moving to a later line that is long enough restores the preferred column.
+- Cursor repositioning after editing must keep the preferred-column state consistent with the resulting position.
+
+This follows ADR-014. The Cursor continues to store logical document coordinates; it does not store terminal screen coordinates.
+
+### Viewport and Scrolling
+
+A dedicated Viewport stores two offsets:
+
+```text
+Viewport
+├── viewport_row
+└── viewport_column
+```
+
+`viewport_row` identifies the first visible logical document row. `viewport_column` identifies the first visible display column in the current ASCII-only renderer. The Viewport does not duplicate or modify Document content.
+
+Before rendering, the application maintains Cursor visibility by adjusting the Viewport offsets when the Cursor would otherwise fall outside the visible region. The Renderer uses those offsets to draw the visible document region and to translate the logical Cursor position into terminal-relative coordinates.
+
+The current interactive input path supports printable ASCII only. Under that restriction, a logical column and a displayed column coincide. Tabs and Unicode display-width mapping are not implemented, so this implementation must not be treated as the final variable-width character model described by ADR-019.
+
+### Event-Loop Integration
+
+The existing event loop in `main.c` recognizes Up and Down Arrow escape sequences and delegates movement to the Cursor module. Successful movement triggers a redraw. The application also updates the Cursor's position after line edits so preferred-column state remains consistent.
+
+The input-processing pipeline remains temporary and direct: the dedicated Input Handler, Input Parser, Input Engine, and Command Engine have not yet been integrated.
+
+### Terminal Edge Behavior and WSL Fix
+
+Manual testing in WSL exposed a crash when typing a long line as it reached the terminal's rightmost physical column. The final fix initializes the Renderer with one fewer column than the terminal reports, reserving the final physical column.
+
+This is a terminal-compatibility workaround for the observed right-edge wrapping behavior. It reduces the usable rendering width by one column; it does not change the Document's logical line length or the Cursor's logical coordinate model. Do not describe the workaround as a general solution for all terminal emulators without further testing.
+
+An earlier vertical-scrolling issue was also found during manual testing: after scrolling to the bottom, Up movement initially appeared unresponsive and subsequent edits could affect a different displayed row. The Viewport/Renderer integration was corrected, and the user confirmed that vertical scrolling now behaves correctly.
+
+### Verification and Evidence
+
+For the current Chapter 49 implementation:
+
+- CMake configuration and build succeeded.
+- The registered `smoke` and `editing` CTest targets passed.
+- Regression tests cover vertical movement, preferred-column restoration, Viewport boundaries, repeated scrolling, and Renderer positioning.
+- The user confirmed that the vertical scrolling issue is resolved in the terminal.
+- The user confirmed that the horizontal right-edge crash is resolved in WSL after the final-column reservation.
+
+The tests and user-reported interactive checks are evidence for the current supported scope. They do not establish Unicode-aware rendering, terminal resizing, comprehensive allocation-failure behavior, or compatibility with every terminal emulator.
+
+### Implementation Lessons
+
+1. **Keep coordinate spaces distinct.** Cursor coordinates are logical document positions; Viewport offsets describe the visible region; Renderer calculations map between document and terminal positions.
+2. **Preserve preferred-column intent.** Vertical movement should clamp the actual column on short lines without discarding the preferred column.
+3. **Update visibility after state changes.** Cursor movement and editing must be followed by Viewport visibility maintenance before rendering.
+4. **Test in the actual terminal environment.** Passing unit tests did not reveal the original scrolling symptoms; interactive testing in WSL exposed them.
+5. **Reserve the terminal edge deliberately.** The final physical column is unused to avoid the observed right-edge failure. This is a compatibility trade-off and should remain documented.
+6. **Do not overstate test coverage.** Passing the current two CTest targets and the user's manual verification does not replace broader end-to-end, resize, Unicode, or failure-path testing.
+7. **Continue from the current source.** Chapter 50 should add file loading through the File Manager boundary while preserving the working Cursor, Viewport, Document, and Renderer modules.
+
+### Current Limitations After Chapter 49
+
+The implementation still does not provide:
+
+- File loading or saving, or a save workflow that clears the Dirty Flag.
+- UTF-8-aware interactive input and Unicode display-width mapping; insertion remains printable ASCII and editing is byte-oriented.
+- Tab expansion.
+- The terminal Delete key; Backspace is supported.
+- The dedicated Input Handler, Input Parser, Input Engine, and Command Engine pipeline.
+- Status Bar or Message Bar.
+- Terminal resize handling and frame reinitialization.
+- Comprehensive automated coverage of rendering, terminal integration, allocation failures, and all failure paths.
+
+These are remaining scope boundaries, not claims that the corresponding features were tested and found defective.
+
+---
+
+## Next Milestone — Chapter 50: Opening Files
+
+Continue from the verified Chapter 49 source. Implement file loading through the dedicated File Manager boundary. Keep file-system operations out of the Document, Cursor, Viewport, and Renderer modules. Follow the project's established encoding and line-ending decisions, and add focused tests for successful loading, empty files, invalid paths, and read failures before integrating the load operation into application initialization.
