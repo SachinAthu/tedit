@@ -142,9 +142,7 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
 
     if (success)
     {
-        success = renderer_write_cursor_position(
-            state->cursor.row,
-            state->cursor.column);
+        success = renderer_write_cursor_position(state->cursor.row, state->cursor.column);
     }
 
     /*
@@ -192,15 +190,29 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
     /* Start from a clean slate: every cell becomes a blank space. */
     screen_buffer_clear(&renderer->screen_buffer, ' ');
 
-    /* For each visible screen row... */
-    for (size_t row = 0; row < state->document.line_count && row < renderer->screen_buffer.rows; row++)
+    /* Map each screen row to its corresponding logical document row. */
+    for (size_t screen_row = 0; screen_row < renderer->screen_buffer.rows; screen_row++)
     {
-        const DocumentLine *line = &state->document.lines[row];
+        const size_t document_row = state->viewport.viewport_row + screen_row;
 
-        /* ...copy each character of that line into the matching screen cell. */
-        for (size_t column = 0; column < line->length && column < renderer->screen_buffer.columns; column++)
+        if (document_row >= state->document.line_count)
         {
-            if (!screen_buffer_set(&renderer->screen_buffer, row, column, line->data[column]))
+            break;
+        }
+
+        const DocumentLine *line = &state->document.lines[document_row];
+
+        /* Horizontal scrolling maps screen columns to document columns. */
+        for (size_t screen_column = 0; screen_column < renderer->screen_buffer.columns; screen_column++)
+        {
+            const size_t document_column = state->viewport.viewport_column + screen_column;
+
+            if (document_column >= line->length)
+            {
+                break;
+            }
+
+            if (!screen_buffer_set(&renderer->screen_buffer, screen_row, screen_column, line->data[document_column]))
             {
                 return false;
             }

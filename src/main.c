@@ -112,6 +112,16 @@ static int read_escape_byte(unsigned char *byte)
 
 static bool redraw_after_action(Renderer *renderer, const EditorState *state)
 {
+    if (renderer == NULL || state == NULL)
+    {
+        return false;
+    }
+
+    if (!viewport_ensure_cursor_visible(&state->viewport, state->cursor.row, state->cursor.column, renderer->screen_buffer.rows, renderer->screen_buffer.columns))
+    {
+        return false;
+    }
+
     return renderer_render(renderer, state);
 }
 
@@ -178,6 +188,7 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
             }
 
             bool moved = false;
+
             if (second == 'D')
             {
                 moved = cursor_move_left(&state->cursor);
@@ -185,6 +196,14 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
             else if (second == 'C')
             {
                 moved = cursor_move_right(&state->cursor, &state->document);
+            }
+            else if (second == 'A')
+            {
+                moved = cursor_move_up(&state->cursor, &state->document);
+            }
+            else if (second == 'B')
+            {
+                moved = cursor_move_down(&state->cursor, &state->document);
             }
 
             if (moved && !redraw_after_action(renderer, state))
@@ -267,15 +286,6 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
          * Accept printable ASCII characters only.
          */
         if (input < 0x20 || input > 0x7E)
-        {
-            continue;
-        }
-
-        /*
-         * Keep the Cursor visible until viewport
-         * scrolling is implemented.
-         */
-        if (renderer->screen_buffer.columns < 2 || state->cursor.column >= renderer->screen_buffer.columns - 1)
         {
             continue;
         }

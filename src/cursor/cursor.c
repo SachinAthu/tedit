@@ -18,6 +18,7 @@ void cursor_init(Cursor *cursor)
 
     cursor->row = 0;
     cursor->column = 0;
+    cursor->preferred_column = 0;
 }
 
 /*
@@ -50,6 +51,7 @@ bool cursor_set_position(Cursor *cursor, const Document *document, size_t row, s
 
     cursor->row = row;
     cursor->column = column;
+    cursor->preferred_column = column;
 
     return true;
 }
@@ -68,7 +70,6 @@ bool cursor_set_position(Cursor *cursor, const Document *document, size_t row, s
  */
 bool cursor_advance(Cursor *cursor, const Document *document)
 {
-    const DocumentLine *line;
 
     if (cursor == NULL || document == NULL ||
         cursor->row >= document->line_count)
@@ -76,7 +77,7 @@ bool cursor_advance(Cursor *cursor, const Document *document)
         return false;
     }
 
-    line = &document->lines[cursor->row];
+    const DocumentLine *line = &document->lines[cursor->row];
 
     if (cursor->column >= line->length)
     {
@@ -84,6 +85,7 @@ bool cursor_advance(Cursor *cursor, const Document *document)
     }
 
     cursor->column += 1;
+    cursor->preferred_column = cursor->column;
 
     return true;
 }
@@ -106,6 +108,8 @@ bool cursor_move_left(Cursor *cursor)
     }
 
     cursor->column -= 1;
+    cursor->preferred_column = cursor->column;
+
     return true;
 }
 
@@ -123,19 +127,63 @@ bool cursor_move_left(Cursor *cursor)
  */
 bool cursor_move_right(Cursor *cursor, const Document *document)
 {
-    const DocumentLine *line;
 
     if (cursor == NULL || document == NULL || cursor->row >= document->line_count)
     {
         return false;
     }
 
-    line = &document->lines[cursor->row];
+    const DocumentLine *line = &document->lines[cursor->row];
+
     if (cursor->column >= line->length)
     {
         return false;
     }
 
     cursor->column += 1;
+    cursor->preferred_column = cursor->column;
+
+    return true;
+}
+
+bool cursor_move_up(Cursor *cursor, const Document *document)
+{
+    if (cursor == NULL || document == NULL || cursor->row >= document->line_count || cursor->row == 0)
+    {
+        return false;
+    }
+
+    const size_t target_row = cursor->row - 1;
+    const DocumentLine *target_line = &document->lines[target_row];
+
+    cursor->row = target_row;
+    cursor->column = cursor->preferred_column;
+
+    if (cursor->column > target_line->length)
+    {
+        cursor->column = target_line->length;
+    }
+
+    return true;
+}
+
+bool cursor_move_down(Cursor *cursor, const Document *document)
+{
+    if (cursor == NULL || document == NULL || cursor->row >= document->line_count || cursor->row + 1 >= document->line_count)
+    {
+        return false;
+    }
+
+    const size_t target_row = cursor->row + 1;
+    const DocumentLine *target_line = &document->lines[target_row];
+
+    cursor->row = target_row;
+    cursor->column = cursor->preferred_column;
+
+    if (cursor->column > target_line->length)
+    {
+        cursor->column = target_line->length;
+    }
+
     return true;
 }

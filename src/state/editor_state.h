@@ -3,6 +3,7 @@
 
 #include "cursor/cursor.h"
 #include "document/document.h"
+#include "viewport/viewport.h"
 
 #include <stdbool.h>
 
@@ -10,6 +11,7 @@ typedef struct
 {
     Document document;
     Cursor cursor;
+    Viewport viewport;
     bool is_dirty;
 } EditorState;
 

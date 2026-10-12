@@ -18,6 +18,7 @@ add_library(
     src/state/editor_state.c
     src/document/document.c
     src/cursor/cursor.c
+    src/viewport.c
     src/renderer/screen_buffer.c
     src/renderer/renderer.c
 )
