@@ -18,6 +18,8 @@
 #define BACKSPACE_ALT 0x08
 #define ESCAPE 0x1B
 #define ESCAPE_TIMEOUT 50000
+#define ENTER 0x0D
+#define LINE_FEED 0x0A
 
 /*
  * Ask the terminal how many rows and columns it currently has.
@@ -195,24 +197,69 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
 
         if (input == BACKSPACE || input == BACKSPACE_ALT)
         {
-            if (state->cursor.column == 0)
+            if (state->cursor.column > 0)
+            {
+                const size_t delete_column = state->cursor.column - 1;
+
+                if (!document_delete_character(&state->document, state->cursor.row, delete_column))
+                {
+                    continue;
+                }
+
+                state->cursor.column = delete_column;
+            }
+            else if (state->cursor.row > 0)
+            {
+                const size_t previous_row = state->cursor.row - 1;
+
+                const DocumentLine *previous_line = document_get_line(&state->document, previous_row);
+
+                if (previous_line == NULL)
+                {
+                    continue;
+                }
+
+                const size_t previous_length = previous_line->length;
+
+                if (!document_merge_lines(&state->document, previous_row))
+                {
+                    continue;
+                }
+
+                state->cursor.row = previous_row;
+                state->cursor.column = previous_length;
+            }
+            else
             {
                 continue;
             }
 
-            const size_t delete_column = state->cursor.column - 1;
-            if (!document_delete_character(&state->document, state->cursor.row, delete_column))
-            {
-                continue;
-            }
-
-            state->cursor.column = delete_column;
             state->is_dirty = true;
 
             if (!redraw_after_action(renderer, state))
             {
                 return false;
             }
+
+            continue;
+        }
+
+        if (input == ENTER || input == LINE_FEED)
+        {
+            if (!document_split_line(&state->document, state->cursor.row, state->cursor.column))
+            {
+                continue;
+            }
+
+            state->cursor.row += 1;
+            state->cursor.column = 0;
+            state->is_dirty = true;
+
+            if (!redraw_after_action(renderer, state))
+            {
+                return false;
+            }
+
             continue;
         }
 

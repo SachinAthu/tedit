@@ -324,3 +324,119 @@ bool document_delete_character(Document *document, size_t row, size_t column)
 
     return true;
 }
+
+bool document_split_line(Document *document, size_t row, size_t column)
+{
+    DocumentLine *line = document_get_line(document, row);
+
+    if (line == NULL || column > line->length)
+    {
+        return false;
+    }
+
+    size_t suffix_length = line->length - column;
+    size_t new_line_capacity = suffix_length + 1;
+
+    if (new_line_capacity < INITIAL_LINE_CAPACITY)
+    {
+        new_line_capacity = INITIAL_LINE_CAPACITY;
+    }
+
+    DocumentLine new_line;
+    new_line.data = malloc(new_line_capacity);
+
+    if (new_line.data == NULL)
+    {
+        return false;
+    }
+
+    new_line.length = suffix_length;
+    new_line.capacity = new_line_capacity;
+
+    if (suffix_length > 0)
+    {
+        memcpy(new_line.data, &line->data[column], suffix_length);
+    }
+
+    /*
+     * Reserve a line-array slot before changing the document.
+     * If allocation fails, the existing document remains unchanged.
+     */
+    if (document->line_count == document->line_capacity && !document_grow_lines(document))
+    {
+        document_line_destroy(&new_line);
+        return false;
+    }
+
+    /*
+     * Shift the lines after the split point one slot to the right.
+     */
+    memmove(&document->lines[row + 2], &document->lines[row + 1], (document->line_count - row - 1) * sizeof(*document->lines));
+
+    /*
+     * Keep the prefix in the original line and insert the suffix
+     * as the new following line.
+     */
+    line = &document->lines[row];
+    line->length = column;
+    document->lines[row + 1] = new_line;
+    document->line_count += 1;
+
+    return true;
+}
+
+bool document_merge_lines(Document *document, size_t row)
+{
+    if (document == NULL || row >= document->line_count || row + 1 >= document->line_count)
+    {
+        return false;
+    }
+
+    DocumentLine *first_line = &document->lines[row];
+    DocumentLine *second_line = &document->lines[row + 1];
+
+    if (second_line->length > (size_t)-1 - first_line->length)
+    {
+        return false;
+    }
+
+    size_t combined_length = first_line->length + second_line->length;
+
+    if (combined_length >= first_line->capacity)
+    {
+        if (combined_length == (size_t)-1)
+        {
+            return false;
+        }
+
+        char *new_data = realloc(first_line->data, combined_length + 1);
+        if (new_data == NULL)
+        {
+            return false;
+        }
+
+        first_line->data = new_data;
+        first_line->capacity = combined_length + 1;
+    }
+
+    if (second_line->length > 0)
+    {
+        memcpy(&first_line->data[first_line->length], second_line->data, second_line->length);
+    }
+
+    first_line->length = combined_length;
+
+    /*
+     * Release the removed line's buffer.
+     */
+    document_line_destroy(second_line);
+
+    /*
+     * Close the gap in the line array.
+     */
+    memmove(&document->lines[row + 1], &document->lines[row + 2], (document->line_count - row - 2) * sizeof(*document->lines));
+
+    document->line_count -= 1;
+
+    return true;
+}

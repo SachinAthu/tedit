@@ -4,7 +4,7 @@
 
 **Active — Volume X implementation**
 
-The runtime foundation and first editable-screen milestone are complete. Chapter 47 adds basic character editing, horizontal Cursor movement, Backspace deletion, and the Dirty Flag. The current implementation builds successfully and its existing automated tests pass. Manual verification of Chapter 47 keyboard behavior remains outstanding.
+The runtime foundation and editing milestones through Chapter 48 are complete. Chapter 48 adds logical-line splitting and merging, including Enter and Backspace behavior at line boundaries. The user confirmed that the editor builds, works in the terminal, and all registered automated tests pass.
 
 ## Completed
 
@@ -58,6 +58,20 @@ The runtime foundation and first editable-screen milestone are complete. Chapter
 - [x] Editing changes trigger a screen redraw
 - [x] Smoke and editing automated tests pass in the Chapter 47 repository snapshot
 
+### Chapter 48 — Working with Lines
+
+- [x] `document_split_line()` splits a logical line at a valid row and column
+- [x] Splitting at the beginning or end of a line supports empty logical lines
+- [x] `document_merge_lines()` appends the following line and removes it from the Document
+- [x] Enter and line feed trigger line splitting at the Cursor
+- [x] Backspace at column zero merges with the previous line when one exists
+- [x] Cursor moves to the beginning of the new line after splitting
+- [x] Cursor moves to the previous line's former end after merging
+- [x] Backspace at the beginning of the first line leaves the Document unchanged
+- [x] Successful line edits update the Dirty Flag and trigger a redraw
+- [x] Editing tests cover splitting, merging, empty lines, invalid operations, and Cursor transitions
+- [x] User confirmed the editor builds and works in the terminal and all tests pass
+
 ## Current Runtime Capabilities
 
 The application can now:
@@ -70,8 +84,8 @@ The application can now:
 - insert printable ASCII characters into the Document;
 - advance the Cursor after successful insertion;
 - move the Cursor left and right within the current logical line;
-- delete the character before the Cursor using Backspace, provided the Cursor is not at column zero;
-- mark the Document dirty after successful insertion or Backspace deletion;
+- delete the character before the Cursor using Backspace, or merge with the previous line when Backspace is pressed at column zero and a previous line exists;
+- mark the Document dirty after successful insertion, deletion, line splitting, or line merging;
 - redraw the screen after editing;
 - exit using `Ctrl-Q`;
 - clean up initialized resources and return control to the shell.
@@ -80,73 +94,67 @@ The application can now:
 
 ### Build and automated tests
 
-- [x] CMake configuration completed successfully for the Chapter 47 repository snapshot
-- [x] Build completed successfully for the Chapter 47 repository snapshot
+- [x] CMake configuration and build succeeded for the Chapter 48 implementation
 - [x] `smoke` automated test passed
-- [x] `editing` automated test passed
-- [x] Manually verify Left and Right Arrow behavior in a real terminal
-- [x] Manually verify Backspace behavior, including the column-zero boundary
-- [x] Manually verify visible updates and terminal cleanup after editing
+- [x] `editing` automated test passed, including line splitting and merging cases
+- [x] User confirmed the editor builds and works in the terminal
 - [ ] Comprehensive automated tests for Document, Cursor, Screen Buffer, and Renderer
 - [ ] Integration and regression testing across failure paths
+- [ ] Broader end-to-end verification during the hardening milestone
 
-The passing tests establish that the current automated test suite succeeds; they do not establish comprehensive correctness. Chapter 47's keyboard behavior still requires manual terminal verification.
+The current build and registered tests pass, and the user has confirmed interactive operation. Comprehensive correctness, allocation-failure coverage, and later end-to-end hardening remain outstanding.
 
 ## Implementation Status Summary
 
-| Area                                        | Status                                                                         |
-| ------------------------------------------- | ------------------------------------------------------------------------------ |
-| Repository and Git workflow                 | Established                                                                    |
-| CMake and C99 configuration                 | Established                                                                    |
-| Terminal initialization and raw mode        | Implemented                                                                    |
-| Terminal restoration and cleanup            | Implemented                                                                    |
-| Application lifecycle and event loop        | Implemented                                                                    |
-| Editor State                                | Implemented                                                                    |
-| Document                                    | Basic implementation; vector of logical lines and character insertion/deletion |
-| Cursor                                      | Basic implementation; validated position and horizontal movement within a line |
-| Screen Buffer                               | Implemented                                                                    |
-| Renderer                                    | Basic full-redraw implementation                                               |
-| Printable ASCII insertion                   | Implemented                                                                    |
-| Backspace character deletion                | Implemented within the current line                                            |
-| Delete key                                  | Not implemented                                                                |
-| Enter, line splitting, and line merging     | Not implemented                                                                |
-| Dirty Flag                                  | Implemented for successful insertion and Backspace deletion                    |
-| Full document navigation                    | Not implemented                                                                |
-| Viewport and scrolling                      | Not implemented                                                                |
-| File loading                                | Not implemented                                                                |
-| File saving                                 | Not implemented                                                                |
-| Dedicated Input Parser and command pipeline | Not implemented; basic input recognition remains in the event loop             |
-| Status Bar and Message Bar                  | Not implemented                                                                |
-| Terminal resize handling                    | Not implemented                                                                |
-| Automated tests                             | Smoke and editing tests pass; comprehensive coverage pending                   |
-| Hardening and final integration             | Pending                                                                        |
+| Area                                                        | Status                                                                              |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Repository and Git workflow                                 | Established                                                                         |
+| CMake and C99 configuration                                 | Established                                                                         |
+| Terminal initialization, raw mode, restoration, and cleanup | Implemented                                                                         |
+| Application lifecycle and event loop                        | Implemented; input handling remains temporary                                       |
+| Editor State                                                | Implemented                                                                         |
+| Document                                                    | Vector of logical lines; insertion, deletion, splitting, and merging implemented    |
+| Cursor                                                      | Validated position and horizontal movement within a line; vertical movement pending |
+| Screen Buffer                                               | Implemented                                                                         |
+| Renderer                                                    | Basic full-redraw implementation                                                    |
+| Printable ASCII insertion                                   | Implemented                                                                         |
+| Backspace character deletion and line merging               | Implemented                                                                         |
+| Enter and logical-line splitting                            | Implemented                                                                         |
+| Dirty Flag                                                  | Updated after successful insertion, deletion, splitting, and merging                |
+| Full document navigation                                    | Not implemented; Chapter 49 next                                                    |
+| Viewport and scrolling                                      | Not implemented; Chapter 49 next                                                    |
+| File loading                                                | Not implemented                                                                     |
+| File saving                                                 | Not implemented                                                                     |
+| Dedicated Input Parser and command pipeline                 | Not implemented; basic input recognition remains in the event loop                  |
+| Status Bar and Message Bar                                  | Not implemented                                                                     |
+| Terminal resize handling                                    | Not implemented                                                                     |
+| Automated tests                                             | `smoke` and `editing` pass; comprehensive coverage pending                          |
+| Hardening and final integration                             | Pending                                                                             |
 
 ## Current Milestone
 
-**Chapter 47 — Editing Text: Implemented; manual verification pending**
+**Chapter 48 — Working with Lines: implemented and verified**
 
-The Chapter 47 implementation adds basic character deletion, horizontal Cursor movement, and Dirty Flag updates. The Chapter 47 repository snapshot configured and built successfully, and both the `smoke` and `editing` automated tests passed. This does not mean the editor is feature-complete, and keyboard behavior still needs manual verification in a real terminal.
+Chapter 48 adds Document line splitting and merging. Enter and line feed split the current line at the Cursor; Backspace at column zero merges with the previous line when possible. Cursor placement, Dirty Flag updates, and redraws are coordinated in the existing event loop. The user confirmed that the editor builds and works in the terminal and all registered tests pass.
 
 ## Next Milestone
 
-**Chapter 48 — Working with Lines**
+**Chapter 49 — Navigating the Document**
 
-Planned focus:
+Planned focus, following the established implementation sequence:
 
-- support Enter and splitting a logical line at the Cursor;
-- merge adjacent logical lines when Backspace is pressed at column zero, subject to the established line-editing rules;
-- update Document and Cursor state consistently when a line is split or merged;
-- preserve Document validity and correct Cursor bounds at line boundaries;
-- add tests for splitting, merging, empty lines, and boundary conditions.
+- implement vertical Cursor movement across logical lines;
+- define and implement preferred-column behavior for Up and Down movement;
+- introduce or complete Viewport state and Cursor visibility handling;
+- implement vertical and horizontal scrolling as specified by the project architecture and ADRs;
+- test navigation boundaries, short and empty lines, and viewport invariants.
 
-The implementation must continue from the existing source code. Changes to established modules should be explicit and justified rather than silently replacing previous implementations.
+Continue from the current source code. Preserve established module boundaries and identify every changed file before implementing the milestone.
 
 ## Current Limitations
 
 - Only printable ASCII characters are accepted for insertion.
-- Backspace deletes characters only within the current logical line; it does not merge lines at column zero.
 - The Delete key is not implemented.
-- Enter and line splitting are not implemented.
 - Cursor movement is limited to Left and Right within a single line; vertical movement and full document navigation are not implemented.
 - Viewport-based scrolling is not implemented, and insertion is constrained by the current terminal-width behavior.
 - Input handling remains temporarily inside the application event loop rather than a dedicated Input Parser and command pipeline.

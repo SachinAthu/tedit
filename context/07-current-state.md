@@ -2,15 +2,15 @@
 
 ## Project
 
-Terminal text editor implementation in C99 for Linux/POSIX, developed incrementally using CMake.
+Terminal text editor implementation in C99 for Linux/POSIX, developed incrementally using CMake. The implementation repository is separate from the book repository and follows the architecture, software requirements, runtime model, coding standards, and ADRs recorded in `context/`.
 
 ## Current Milestone
 
-**Chapter 47 — Editing Text**
+**Chapter 48 — Working with Lines: implemented and verified**
 
-Chapter 47 extends the first editable screen with character deletion, horizontal Cursor movement, Backspace handling, and the Dirty Flag. The implementation continues to use the existing Document, Cursor, Editor State, Renderer, and Terminal modules.
+Chapter 48 adds logical-line splitting and merging to the existing editor. Enter (`0x0D`) and line feed (`0x0A`) split the current logical line at the Cursor. Backspace deletes the preceding character when the Cursor is inside a line; at column zero, it merges the current line into the previous line when one exists. The Cursor and Dirty Flag are updated after successful edits, and the screen is redrawn.
 
-The project was configured and built successfully from the Chapter 47 repository snapshot. Both registered CTest tests (`smoke` and `editing`) passed in that verification run. Interactive terminal behavior still requires manual verification in the target WSL/Linux terminal.
+The user has confirmed that the editor builds, works in the terminal, and all tests pass. The current registered CTest targets are `smoke` and `editing`.
 
 ## Completed
 
@@ -55,7 +55,7 @@ The project was configured and built successfully from the Chapter 47 repository
 - Cursor stores zero-based logical row and column coordinates.
 - Cursor initialization places it at the beginning of the Document.
 - Cursor position assignment validates the target row and column.
-- Cursor advancement supports the initial character-insertion workflow.
+- Cursor advancement supports character insertion.
 - Cursor operations are implemented in the `cursor` module.
 
 #### Editor State
@@ -63,6 +63,7 @@ The project was configured and built successfully from the Chapter 47 repository
 - `EditorState` owns the Document and Cursor.
 - Editor State initialization establishes the initial editing state.
 - Editor State destruction releases its owned Document resources.
+- `EditorState` contains the `is_dirty` flag.
 - Editor State acts as the central source of truth for the current editing session.
 
 #### Screen Buffer
@@ -90,25 +91,23 @@ The project was configured and built successfully from the Chapter 47 repository
 
 #### Document Editing
 
+- `document_insert_character()` inserts a character at a valid row and column.
 - `document_delete_character()` removes a character at a valid row and column.
-- Deletion shifts the following bytes left and decreases the line length.
+- Insertion and deletion shift bytes as required and update line length.
 - Invalid rows and columns are rejected without modifying the line.
-- The Document remains a vector of logical lines; line splitting and merging are not implemented in this milestone.
 
 #### Cursor Movement
 
 - `cursor_move_left()` moves left within the current logical line and refuses to move before column zero.
 - `cursor_move_right()` moves right within the current line and refuses to move beyond the line length.
-- Movement across logical line boundaries is not implemented.
+- Horizontal movement across logical line boundaries is handled by the Chapter 48 editing behavior rather than by the horizontal Cursor movement functions.
 
 #### Dirty Flag
 
-- `EditorState` contains the `is_dirty` Boolean field.
-- The flag initializes to `false`.
+- `is_dirty` initializes to `false`.
 - Successful character insertion sets the flag to `true`.
-- Successful Backspace deletion sets the flag to `true`.
-- Failed or out-of-bounds deletion does not mark the Document dirty.
-- There is no file-saving workflow yet, so the flag is not cleared after saving.
+- Successful character deletion sets the flag to `true`.
+- The flag is not yet cleared by a save operation because file saving is not implemented.
 
 #### Interactive Editing Loop
 
@@ -116,13 +115,39 @@ The project was configured and built successfully from the Chapter 47 repository
 - EOF terminates the event loop.
 - Printable ASCII characters are inserted at the current Cursor position.
 - The Cursor advances after successful insertion.
-- Backspace is recognized as byte `0x7F` or `0x08`; it deletes the character before the Cursor when the Cursor column is greater than zero.
+- Backspace is recognized as byte `0x7F` or `0x08`.
 - Left and Right Arrow input is recognized using the current basic `ESC [` sequence handling.
 - Successful movement and text edits trigger a full redraw.
 - Unsupported control characters and non-ASCII input bytes are ignored.
-- The Delete key is **not** implemented; its terminal escape sequence is not dispatched to a delete-at-cursor operation.
-- Insertion remains restricted near the right edge because Viewport scrolling has not yet been implemented.
-- Input handling remains temporarily inside `main.c`; it is not yet the final Input Handler, Input Parser, Input Engine, or Command Engine architecture.
+- Input handling remains temporarily inside `main.c`; the final Input Handler, Input Parser, Input Engine, and Command Engine architecture has not yet been integrated.
+
+### Chapter 48 — Working with Lines
+
+#### Document Line Operations
+
+- `document_split_line(Document *document, size_t row, size_t column)` splits one logical line at a valid insertion position.
+- The original line retains the prefix; a newly allocated line receives the suffix.
+- Splitting at column zero creates an empty line before the original contents.
+- Splitting at the end of a line creates an empty following line.
+- `document_merge_lines(Document *document, size_t row)` appends line `row + 1` to line `row` and removes the second line.
+- Merge rejects a row without a following line and checks for combined-length overflow and allocation failure.
+- Document operations preserve the logical-line ordering and update `line_count` after successful changes.
+
+#### Enter and Backspace
+
+- Enter (`0x0D`) and line feed (`0x0A`) invoke line splitting at the current Cursor position.
+- After a successful split, the Cursor moves to column zero of the new line.
+- Backspace at a column greater than zero deletes the character immediately before the Cursor and moves the Cursor to the deleted character's former position.
+- Backspace at column zero merges the current line into the previous line when the current row is greater than zero.
+- After a successful merge, the Cursor moves to the previous line's former end position.
+- Backspace at the beginning of the first line is a no-op.
+- Successful line splitting, line merging, insertion, and deletion set `is_dirty` to `true` and trigger a redraw.
+- Failed line operations do not proceed with Cursor or Dirty Flag updates.
+
+#### Tests
+
+- The `editing` test target covers Document editing, invalid operations, horizontal Cursor boundaries, line splitting, line merging, empty-line behavior, and line-editing Cursor transitions.
+- The `smoke` test target remains registered and passes.
 
 ## Current Runtime
 
@@ -168,10 +193,10 @@ Interactive Event Loop
       |                                      v
       |                                 Render Frame
       |
-      +---- Backspace ------------------> Delete Before Cursor
+      +---- Enter / Line Feed ----------> Split Current Line
       |                                      |
       |                                      v
-      |                                 Move Cursor Left
+      |                              Move to New Line, Column 0
       |                                      |
       |                                      v
       |                                 Set Dirty Flag
@@ -179,10 +204,21 @@ Interactive Event Loop
       |                                      v
       |                                 Render Frame
       |
-      +---- Left / Right Arrow ---------> Move Cursor
-                                             |
-                                             v
-                                        Render if moved
+      +---- Backspace ------------------> Delete or Merge Lines
+      |                                      |
+      |                                      v
+      |                              Update Cursor Position
+      |                                      |
+      |                                      v
+      |                                 Set Dirty Flag
+      |                                      |
+      |                                      v
+      |                                 Render Frame
+      |
+      +---- Left / Right Arrow ---------> Move Cursor Within Line
+      |                                      |
+      |                                      v
+      |                                 Render if moved
       |
       v
 Destroy Renderer
@@ -229,7 +265,7 @@ tedit-main/
 │   ├── test_smoke.c
 │   └── test_editing.c
 ├── docs/
-│   └── chapter-47.md
+│   └── chapter-48.md
 ├── context/
 ├── CMakeLists.txt
 └── README.md
@@ -239,36 +275,21 @@ tedit-main/
 
 ### Build and Automated Tests
 
-Verified from the Chapter 47 repository snapshot:
+The user reports that the current Chapter 48 repository builds successfully, the editor works in the terminal, and all tests pass.
 
-- CMake configuration completed successfully.
-- The `tedit`, `test_smoke`, and `test_editing` targets built successfully.
+- CMake configuration and build succeeded.
+- `tedit`, `test_smoke`, and `test_editing` build targets succeeded.
 - CTest passed both registered tests: `smoke` and `editing`.
-- The editing test covers Document insertion/deletion, invalid deletion positions, horizontal Cursor movement boundaries, and initial Dirty Flag state.
+- The `editing` test covers line splitting and merging, boundary cases, empty-line behavior, and Cursor transitions in addition to the earlier editing checks.
 
 ### Manual Verification
 
-The following Chapter 46 behavior was previously reported as manually verified:
-
-- Initial editor screen displayed correctly.
-- Printable ASCII insertion and Cursor advancement worked.
-- Repeated typing updated the displayed document.
-- The terminal cursor rendering glitch was addressed by hiding the terminal cursor during rendering.
-- `Ctrl-Q` exit, terminal restoration, and post-exit shell behavior were checked.
-
-The following Chapter 47 behavior still requires manual verification in the target terminal:
-
-- Backspace removes the character before the Cursor.
-- Left and Right Arrow keys move the Cursor within a line.
-- Editing and movement redraw the screen correctly.
-- `Ctrl-Q` still exits cleanly and restores the terminal.
-
-Automated tests do not establish that interactive key sequences behave identically across all terminals.
+The user has confirmed that the editor builds and works correctly in the terminal after Chapter 48. This includes successful interactive operation at the milestone level. The project still needs broader end-to-end and failure-path validation during the later hardening milestone.
 
 ## Architectural Boundaries
 
 - **Terminal:** terminal configuration, raw mode, restoration, and alternate-screen lifecycle.
-- **Document:** logical lines and character storage, including insertion and deletion.
+- **Document:** logical lines and character storage, including insertion, deletion, splitting, and merging.
 - **Cursor:** logical editing position and horizontal movement within a line.
 - **Editor State:** ownership and coordination of the Document and Cursor, including the Dirty Flag.
 - **Screen Buffer:** in-memory representation of the visible frame.
@@ -280,12 +301,9 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 ## Known Limitations
 
 - Delete-key behavior is not implemented.
-- Enter and logical-line splitting are not implemented.
-- Backspace at column zero does not merge with the previous line.
-- Cursor movement across logical line boundaries is not implemented.
-- Vertical navigation and preferred-column handling are not implemented.
-- Viewport management and horizontal/vertical scrolling are not implemented.
-- Editing remains restricted near the right edge of the visible screen.
+- Cursor movement with Up and Down Arrow keys is not implemented.
+- Preferred-column behavior is not implemented.
+- Viewport management and horizontal/vertical scrolling are not implemented; insertion and visibility remain constrained by the current terminal-width behavior.
 - Interactive input supports printable ASCII only; UTF-8-aware input is not implemented.
 - File loading and saving are not implemented.
 - The Dirty Flag is not yet connected to save behavior.
@@ -293,14 +311,14 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 - Status Bar and Message Bar are not implemented.
 - Terminal resizing and frame reinitialization are not implemented.
 - Incremental or dirty-cell rendering is not implemented.
-- Automated tests do not yet comprehensively cover Renderer behavior, terminal integration, failure paths, or interactive editing.
+- Automated tests do not yet comprehensively cover Renderer behavior, terminal integration, allocation-failure paths, or end-to-end interactions.
 
 ## Current Focus
 
-Chapter 47 — Editing Text is implemented in the current repository snapshot. The project builds, and the smoke and editing tests pass. Manual verification of Chapter 47 keyboard behavior remains.
+**Chapter 48 — Working with Lines is implemented and verified.** The editor builds, all registered tests pass, and the user has confirmed that the editor works in the terminal.
 
 ## Next Step
 
-**Chapter 48 — Working with Lines**
+**Chapter 49 — Navigating the Document**
 
-Continue from the current source state to implement line splitting, line merging, end-of-line behavior, Cursor transitions across logical lines, and editing invariants. Preserve the existing Document, Cursor, Editor State, Renderer, and Terminal boundaries. Update this document again if implementation or verification reveals a discrepancy.
+Implement vertical Cursor movement, preferred-column behavior, Viewport state, vertical and horizontal scrolling, and Cursor visibility. Continue from the current source code and preserve established module boundaries. Identify every source file that must change, explain the reason for each change, and test navigation boundaries and viewport invariants. Update this document again after Chapter 49 implementation and verification.

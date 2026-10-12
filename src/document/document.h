@@ -28,4 +28,8 @@ bool document_insert_character(Document *document, size_t row, size_t column, ch
 
 bool document_delete_character(Document *document, size_t row, size_t column);
 
+bool document_split_line(Document *document, size_t row, size_t column);
+
+bool document_merge_lines(Document *document, size_t row);
+
 #endif

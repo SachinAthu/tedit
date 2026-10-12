@@ -459,8 +459,62 @@ These are known scope boundaries for the current milestone, not claims that the 
 
 ---
 
-## Next Milestone — Chapter 48: Working with Lines
+## Chapter 48 — Working with Lines
 
-Chapter 48 should add editing operations that change the Document's logical-line structure while preserving the established vector-of-lines representation. The main work is to implement Enter and line splitting at the Cursor, and to merge adjacent lines when Backspace is pressed at column zero, according to the established line-editing rules.
+Chapter 48 extends the vector-of-lines Document implementation with logical-line splitting and merging. It preserves the existing module boundaries and keeps input recognition in `main.c`; no new module or architecture change is introduced.
 
-The implementation should define and test the effects on Document validity, Cursor position, empty lines, and line boundaries. It should add focused tests for splitting and merging and retain the existing smoke and editing tests as regression checks. The work should continue from the authoritative source files and make any interface changes explicit and justified.
+### Document Operations
+
+Two Document operations are added:
+
+- `document_split_line(Document *document, size_t row, size_t column)` splits a line at a valid insertion position. The original line retains the prefix, and a newly allocated line owns the suffix. Splitting at column zero creates an empty prefix line; splitting at the line length creates an empty suffix line.
+- `document_merge_lines(Document *document, size_t row)` appends the next line's bytes to the selected line, releases the removed line's storage, shifts the remaining line records, and decreases the line count.
+
+Both operations validate their row/column boundaries. Allocation failure must be reported without proceeding with the structural edit. The line vector remains the authoritative representation, consistent with ADR-013.
+
+### Input-Loop Integration
+
+The existing application event loop handles Enter (`0x0D`) and line feed (`0x0A`) by splitting at the current Cursor position. After a successful split, the Cursor moves to column zero of the new line.
+
+Backspace now has two editing paths:
+
+- At a column greater than zero, it deletes the byte immediately before the Cursor and moves the Cursor left.
+- At column zero on a row after the first, it merges the current line into the preceding line and moves the Cursor to the former end of that preceding line.
+
+Backspace at the beginning of the first line remains a no-op. The application sets the Dirty Flag and redraws after successful mutations; unsuccessful operations do not count as successful edits. Horizontal Cursor movement remains confined to the current line.
+
+### Verification and Evidence
+
+The Chapter 48 working copy was configured and built with CMake, and the `smoke` and `editing` CTest targets passed. The user subsequently confirmed that all tests passed and that the editor builds and works correctly in the terminal.
+
+This evidence establishes the reported build, automated-test, and interactive checks for this milestone. It does not establish comprehensive coverage of all terminal implementations, allocation-failure paths, UTF-8 input, or the features that remain outside this milestone.
+
+### Implementation Lessons
+
+1. **Treat line edits as structural mutations.** Splitting and merging change the line vector as well as line contents, so line count and line ownership must be updated consistently.
+2. **Prepare allocations before changing structure.** New line storage and any required line-array capacity must be available before the split mutates the existing Document.
+3. **Keep Cursor coordination in the application layer.** Document operations change text; the event loop applies the established Cursor transition, Dirty Flag update, and redraw.
+4. **Define boundary behavior explicitly.** Enter at either line boundary creates an empty line on the corresponding side. Backspace at column zero merges only when a previous line exists.
+5. **Record evidence precisely.** Passing `smoke` and `editing` tests plus the user's interactive confirmation is useful verification, but it is not equivalent to exhaustive regression or failure-path testing.
+6. **Preserve the existing architecture.** Chapter 48 extends the Document API and event loop without replacing the vector-of-lines model or prematurely introducing the dedicated input pipeline.
+
+### Current Limitations After Chapter 48
+
+The implementation still does not provide:
+
+- Delete-key behavior.
+- Vertical Cursor movement or preferred-column behavior.
+- Viewport management and scrolling.
+- UTF-8-aware interactive editing; insertion remains printable ASCII and editing is byte-oriented.
+- File loading or saving, or a save workflow that clears the Dirty Flag.
+- The dedicated Input Handler, Input Parser, Input Engine, and Command Engine pipeline.
+- Status Bar, Message Bar, or terminal resize handling.
+- Comprehensive automated coverage of rendering, terminal integration, allocation failures, and other failure paths.
+
+These are remaining scope boundaries, not claims that the corresponding features were tested and found defective.
+
+---
+
+## Next Milestone — Chapter 49: Navigating the Document
+
+Continue from the verified Chapter 48 source. Implement document-wide Cursor navigation according to the established Cursor Movement Model (ADR-014): vertical movement should change the row while preserving a preferred column, with the actual column clamped to the destination line's length when necessary. Keep Viewport and scrolling work separate unless the Chapter 49 plan explicitly includes it. Preserve the existing module boundaries and add focused tests for vertical movement, short and empty destination lines, document boundaries, and preferred-column restoration.
