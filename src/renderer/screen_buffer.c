@@ -75,65 +75,40 @@ void screen_buffer_destroy(ScreenBuffer *buffer)
     }
 
     free(buffer->cells);
+
     buffer->cells = NULL;
     buffer->rows = 0;
     buffer->columns = 0;
 }
 
-/*
- * Fill every cell in the buffer with the same character.
- *
- * Parameters:
- *   buffer    - the screen buffer to clear.
- *   character - the character to write into every cell.
- *
- * Returns:
- *   void.
- */
-void screen_buffer_clear(ScreenBuffer *buffer, char character)
+void screen_buffer_clear(ScreenBuffer *buffer, uint32_t code_point)
 {
     if (buffer == NULL || buffer->cells == NULL)
     {
         return;
     }
 
-    size_t cell_count;
-
-    cell_count = buffer->rows * buffer->columns;
+    size_t cell_count = buffer->rows * buffer->columns;
 
     /* Overwrite each cell; only the character field is used for now. */
     for (size_t index = 0; index < cell_count; ++index)
     {
-        buffer->cells[index].character = character;
+        buffer->cells[index].code_point = code_point;
     }
 }
 
-/*
- * Write a single character into one cell of the buffer.
- *
- * Parameters:
- *   buffer    - the screen buffer to write to.
- *   row       - the zero-based target row.
- *   column    - the zero-based target column.
- *   character - the character to store.
- *
- * Returns:
- *   true on success, false if `buffer` is NULL or unallocated, or the
- *   coordinates are out of range.
- */
-bool screen_buffer_set(ScreenBuffer *buffer, size_t row, size_t column, char character)
+bool screen_buffer_set(ScreenBuffer *buffer, size_t row, size_t column, uint32_t code_point)
 {
     size_t index;
 
-    if (buffer == NULL || buffer->cells == NULL ||
-        row >= buffer->rows || column >= buffer->columns)
+    if (buffer == NULL || buffer->cells == NULL || row >= buffer->rows || column >= buffer->columns)
     {
         return false;
     }
 
     /* Convert the 2D coordinate into a 1D block index. */
     index = row * buffer->columns + column;
-    buffer->cells[index].character = character;
+    buffer->cells[index].code_point = code_point;
 
     return true;
 }
@@ -154,8 +129,7 @@ const ScreenCell *screen_buffer_get(const ScreenBuffer *buffer, size_t row, size
 {
     size_t index;
 
-    if (buffer == NULL || buffer->cells == NULL ||
-        row >= buffer->rows || column >= buffer->columns)
+    if (buffer == NULL || buffer->cells == NULL || row >= buffer->rows || column >= buffer->columns)
     {
         return NULL;
     }

@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /*
  * A single character cell on the screen grid.
@@ -12,7 +13,7 @@
  */
 typedef struct
 {
-    char character;
+    uint32_t code_point;
 } ScreenCell;
 
 /*
@@ -49,29 +50,9 @@ bool screen_buffer_init(ScreenBuffer *buffer, size_t rows, size_t columns);
  */
 void screen_buffer_destroy(ScreenBuffer *buffer);
 
-/*
- * Fill every cell in the buffer with the same character.
- *
- * Parameters:
- *   buffer    - the buffer to clear.
- *   character - the character to write into every cell.
- */
-void screen_buffer_clear(ScreenBuffer *buffer, char character);
+void screen_buffer_clear(ScreenBuffer *buffer, uint32_t code_point);
 
-/*
- * Write a single character into one cell of the buffer.
- *
- * Parameters:
- *   buffer    - the buffer to write to.
- *   row       - the zero-based target row.
- *   column    - the zero-based target column.
- *   character - the character to store.
- *
- * Returns:
- *   true on success, false if `buffer` is NULL/unallocated or the coordinates
- *   are out of range.
- */
-bool screen_buffer_set(ScreenBuffer *buffer, size_t row, size_t column, char character);
+bool screen_buffer_set(ScreenBuffer *buffer, size_t row, size_t column, uint32_t code_point);
 
 /*
  * Read the cell at a given position.

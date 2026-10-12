@@ -8,6 +8,7 @@
 #include <errno.h>     /* Gives us errno and EINTR, so we can retry interrupted reads. */
 #include <stddef.h>    /* Gives us size_t and NULL. */
 #include <sys/select.h>
+#include <stdint.h>
 
 /* The byte the terminal sends when the user presses Ctrl-Q.
  * 0x11 is hexadecimal for 17, which is Ctrl-Q's ASCII control code.
@@ -342,7 +343,7 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
         }
 
         /* Insert the typed character at the Cursor's position. */
-        if (!document_insert_character(&state->document, state->cursor.row, state->cursor.column, (char)input))
+        if (!document_insert_character(&state->document, state->cursor.row, state->cursor.column, (uint32_t)(unsigned char)input))
         {
             return false;
         }

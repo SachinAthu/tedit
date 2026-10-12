@@ -34,6 +34,10 @@ static bool renderer_write_all(const char *data, size_t length);
 /* Move the terminal's visible cursor to a given row and column. */
 static bool renderer_write_cursor_position(size_t row, size_t column);
 
+static size_t renderer_utf8_length(uint32_t code_point);
+
+static size_t renderer_encode_utf8(uint32_t code_point, char output[4]);
+
 /*
  * Prepare a Renderer object for use.
  *
@@ -193,7 +197,7 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
     }
 
     /* Start from a clean slate: every cell becomes a blank space. */
-    screen_buffer_clear(&renderer->screen_buffer, ' ');
+    screen_buffer_clear(&renderer->screen_buffer, (uint32_t)' ');
 
     /* Map each screen row to its corresponding logical document row. */
     for (size_t screen_row = 0; screen_row < renderer->screen_buffer.rows; screen_row++)
@@ -298,8 +302,6 @@ static bool renderer_write_frame(Renderer *renderer)
 {
     const ScreenBuffer *buffer;
     char sequence[64];
-    size_t frame_length;
-    size_t position;
 
     if (renderer == NULL)
     {
@@ -313,60 +315,29 @@ static bool renderer_write_frame(Renderer *renderer)
         return false;
     }
 
-    /* First pass: measure the frame to size the output buffer exactly. */
-    frame_length = 0;
+    /*
+     * First pass: measure the ANSI cursor-position sequences and
+     * UTF-8-encoded cell contents.
+     */
+    size_t frame_length = 0;
 
     for (size_t row = 0; row < buffer->rows; row++)
     {
-        int sequence_length;
-        size_t row_length;
-
-        /*
-         * Move the cursor to the start of this row. Format "\x1b[<row>;1H"
-         * means "go to line <row>, column 1". Doing this for every row avoids
-         * relying on the terminal to wrap lines automatically.
-         */
-        sequence_length = snprintf(sequence, sizeof(sequence), "\x1b[%zu;1H", row + 1);
+        int sequence_length = snprintf(sequence, sizeof(sequence), "\x1b[%zu;1H", row + 1);
 
         if (sequence_length < 0 || (size_t)sequence_length >= sizeof(sequence))
         {
             return false;
         }
 
-        row_length = (size_t)sequence_length + buffer->columns;
-
-        if (frame_length > SIZE_MAX - row_length)
+        if (frame_length > SIZE_MAX - (size_t)sequence_length)
         {
             return false;
         }
 
-        frame_length += row_length;
-    }
+        frame_length += (size_t)sequence_length;
 
-    if (!renderer_ensure_output_capacity(renderer, frame_length))
-    {
-        return false;
-    }
-
-    /* Second pass: copy the escape sequences and characters into the buffer. */
-    position = 0;
-
-    for (size_t row = 0; row < buffer->rows; row++)
-    {
-        int sequence_length;
-
-        sequence_length = snprintf(sequence, sizeof(sequence), "\x1b[%zu;1H", row + 1);
-
-        if (sequence_length < 0 || (size_t)sequence_length >= sizeof(sequence))
-        {
-            return false;
-        }
-
-        memcpy(renderer->output_buffer + position, sequence, (size_t)sequence_length);
-        position += (size_t)sequence_length;
-
-        /* Copy each character in the row, left to right. */
-        for (size_t column = 0; column < buffer->columns; column++)
+        for (size_t column = 0; column < buffer->columns; ++column)
         {
             const ScreenCell *cell = screen_buffer_get(buffer, row, column);
 
@@ -375,8 +346,60 @@ static bool renderer_write_frame(Renderer *renderer)
                 return false;
             }
 
-            renderer->output_buffer[position] = cell->character;
-            position++;
+            size_t encoded_length = renderer_utf8_length(cell->code_point);
+
+            if (encoded_length == 0 || frame_length > SIZE_MAX - encoded_length)
+            {
+                return false;
+            }
+
+            frame_length += encoded_length;
+        }
+    }
+
+    if (!renderer_ensure_output_capacity(renderer, frame_length))
+    {
+        return false;
+    }
+
+    /*
+     * Second pass: construct the complete terminal output.
+     */
+    size_t position = 0;
+
+    for (size_t row = 0; row < buffer->rows; ++row)
+    {
+        int sequence_length = snprintf(sequence, sizeof(sequence), "\x1b[%zu;1H", row + 1);
+
+        if (sequence_length < 0 || (size_t)sequence_length >= sizeof(sequence))
+        {
+            return false;
+        }
+
+        memcpy(renderer->output_buffer + position, sequence, (size_t)sequence_length);
+
+        position += (size_t)sequence_length;
+
+        for (size_t column = 0; column < buffer->columns; ++column)
+        {
+            const ScreenCell *cell = screen_buffer_get(buffer, row, column);
+
+            if (cell == NULL)
+            {
+                return false;
+            }
+
+            char encoded[4];
+            size_t encoded_length = renderer_encode_utf8(cell->code_point, encoded);
+
+            if (encoded_length == 0)
+            {
+                return false;
+            }
+
+            memcpy(renderer->output_buffer + position, encoded, encoded_length);
+
+            position += encoded_length;
         }
     }
 
@@ -459,11 +482,90 @@ static bool renderer_write_cursor_position(size_t row, size_t column)
     char sequence[64];
     int sequence_length = snprintf(sequence, sizeof(sequence), "\x1b[%zu;%zuH", row + 1, column + 1);
 
-    if (sequence_length < 0 ||
-        (size_t)sequence_length >= sizeof(sequence))
+    if (sequence_length < 0 || (size_t)sequence_length >= sizeof(sequence))
     {
         return false;
     }
 
     return renderer_write_all(sequence, (size_t)sequence_length);
+}
+
+/*
+ * Return the number of bytes required to encode a Unicode scalar value
+ * as UTF-8. Invalid scalar values are rejected.
+ */
+static size_t renderer_utf8_length(uint32_t code_point)
+{
+    if (code_point <= UINT32_C(0x7F))
+    {
+        return 1;
+    }
+
+    if (code_point <= UINT32_C(0x7FF))
+    {
+        return 2;
+    }
+
+    if (code_point >= UINT32_C(0xD800) &&
+        code_point <= UINT32_C(0xDFFF))
+    {
+        return 0;
+    }
+
+    if (code_point <= UINT32_C(0xFFFF))
+    {
+        return 3;
+    }
+
+    if (code_point <= UINT32_C(0x10FFFF))
+    {
+        return 4;
+    }
+
+    return 0;
+}
+
+/*
+ * Encode one Unicode scalar value into a four-byte output array.
+ * The returned length is zero if the value is invalid.
+ */
+static size_t renderer_encode_utf8(uint32_t code_point, char output[4])
+{
+    size_t length = renderer_utf8_length(code_point);
+
+    if (length == 0 || output == NULL)
+    {
+        return 0;
+    }
+
+    if (length == 1)
+    {
+        output[0] = (char)code_point;
+    }
+    else if (length == 2)
+    {
+        output[0] = (char)(UINT32_C(0xC0) | (code_point >> 6));
+
+        output[1] = (char)(UINT32_C(0x80) | (code_point & UINT32_C(0x3F)));
+    }
+    else if (length == 3)
+    {
+        output[0] = (char)(UINT32_C(0xE0) | (code_point >> 12));
+
+        output[1] = (char)(UINT32_C(0x80) | ((code_point >> 6) & UINT32_C(0x3F)));
+
+        output[2] = (char)(UINT32_C(0x80) | (code_point & UINT32_C(0x3F)));
+    }
+    else
+    {
+        output[0] = (char)(UINT32_C(0xF0) | (code_point >> 18));
+
+        output[1] = (char)(UINT32_C(0x80) | ((code_point >> 12) & UINT32_C(0x3F)));
+
+        output[2] = (char)(UINT32_C(0x80) | ((code_point >> 6) & UINT32_C(0x3F)));
+
+        output[3] = (char)(UINT32_C(0x80) | (code_point & UINT32_C(0x3F)));
+    }
+
+    return length;
 }
