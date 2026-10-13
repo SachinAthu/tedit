@@ -1,4 +1,5 @@
 #include "editor_state.h"
+#include "file/file.h"
 
 #include <string.h>
 
@@ -24,6 +25,40 @@ bool editor_state_init(EditorState *state)
     memset(state, 0, sizeof(*state));
 
     if (!document_init(&state->document))
+    {
+        return false;
+    }
+
+    cursor_init(&state->cursor);
+    viewport_init(&state->viewport);
+    state->is_dirty = false;
+
+    return true;
+}
+
+/*
+ * Load a file and reset the session's initial editing position.
+ *
+ * Parameters:
+ *   state - initialized Editor State to update.
+ *   path  - path of the file to load.
+ *
+ * Returns:
+ *   true on success; false on invalid arguments or any file-loading failure.
+ *   The existing Editor State is preserved when loading fails.
+ */
+bool editor_state_load_file(EditorState *state, const char *path)
+{
+    if (state == NULL || path == NULL)
+    {
+        return false;
+    }
+
+    /*
+     * The File Manager stages the complete load and changes the Document
+     * only on success. Do not reset the rest of the Editor State until then.
+     */
+    if (file_load_document(path, &state->document) != FILE_LOAD_OK)
     {
         return false;
     }

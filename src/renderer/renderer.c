@@ -196,7 +196,11 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
         return false;
     }
 
-    /* Start from a clean slate: every cell becomes a blank space. */
+    /*
+     * Start from a clean slate: every cell becomes a blank space. A
+     * zero-line Document (the representation of an empty file) therefore
+     * renders as a blank document area without requiring a synthetic line.
+     */
     screen_buffer_clear(&renderer->screen_buffer, (uint32_t)' ');
 
     /* Map each screen row to its corresponding logical document row. */

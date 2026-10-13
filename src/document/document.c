@@ -183,9 +183,9 @@ DocumentLine *document_get_line(Document *document, size_t row)
 
 bool document_insert_character(Document *document, size_t row, size_t column, uint32_t code_point)
 {
-    DocumentLine *line = document_get_line(document, row);
+    DocumentLine *line;
 
-    if (line == NULL || column > line->length)
+    if (document == NULL)
     {
         return false;
     }
@@ -196,6 +196,45 @@ bool document_insert_character(Document *document, size_t row, size_t column, ui
      * enforce the same restriction for loaded content.
      */
     if (code_point > UINT32_C(0x10FFFF) || (code_point >= UINT32_C(0xD800) && code_point <= UINT32_C(0xDFFF)))
+    {
+        return false;
+    }
+
+    /*
+     * An empty file has no logical lines. The first insertion creates its
+     * first line, but only at the sole valid position (0, 0). Construct the
+     * line before publishing it so allocation failure cannot expose a
+     * partially initialized line.
+     */
+    if (document->line_count == 0)
+    {
+        DocumentLine first_line;
+
+        if (row != 0 || column != 0 || !document_line_init(&first_line))
+        {
+            return false;
+        }
+
+        first_line.data[0] = code_point;
+        first_line.length = 1;
+
+        while (document->line_capacity < 1)
+        {
+            if (!document_grow_lines(document))
+            {
+                document_line_destroy(&first_line);
+                return false;
+            }
+        }
+
+        document->lines[0] = first_line;
+        document->line_count = 1;
+        return true;
+    }
+
+    line = document_get_line(document, row);
+
+    if (line == NULL || column > line->length)
     {
         return false;
     }
@@ -236,10 +275,59 @@ bool document_delete_character(Document *document, size_t row, size_t column)
 
 bool document_split_line(Document *document, size_t row, size_t column)
 {
-    DocumentLine *line = document_get_line(document, row);
+    DocumentLine *line;
     DocumentLine new_line;
     size_t suffix_length;
     size_t new_capacity;
+
+    if (document == NULL)
+    {
+        return false;
+    }
+
+    /*
+     * Pressing Enter in a zero-line Document creates two empty lines. Build
+     * both lines before changing line_count so allocation failure leaves the
+     * Document in its original valid zero-line state.
+     */
+    if (document->line_count == 0)
+    {
+        DocumentLine first_line;
+        DocumentLine second_line;
+
+        if (row != 0 || column != 0)
+        {
+            return false;
+        }
+
+        if (!document_line_init(&first_line))
+        {
+            return false;
+        }
+
+        if (!document_line_init(&second_line))
+        {
+            document_line_destroy(&first_line);
+            return false;
+        }
+
+        while (document->line_capacity < 2)
+        {
+            if (!document_grow_lines(document))
+            {
+                document_line_destroy(&first_line);
+                document_line_destroy(&second_line);
+                return false;
+            }
+        }
+
+        document->lines[0] = first_line;
+        document->lines[1] = second_line;
+        document->line_count = 2;
+        return true;
+    }
+
+    line = document_get_line(document, row);
 
     if (line == NULL || column > line->length)
     {

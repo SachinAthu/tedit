@@ -4,7 +4,7 @@
 
 **Active — Volume X implementation**
 
-Chapters 45–49 are implemented for the current ASCII-only scope. Chapter 49 adds vertical Cursor movement, preferred-column behavior, Viewport state, and vertical and horizontal scrolling. The user confirmed that the project builds, registered tests pass, vertical scrolling works, and the horizontal-edge crash has been fixed in WSL.
+Chapters 45–49 remain implemented as the navigation baseline. Chapter 50 has now been implemented through Sections 50.1–50.8 in the current source snapshot: UTF-8 file loading, LF/CRLF normalization, zero-line Document handling, Editor State reset after successful loading, and optional filename startup. A clean build and all three registered CTest targets (`smoke`, `editing`, and `file`) pass for this snapshot.
 
 ## Completed
 
@@ -86,6 +86,21 @@ Chapters 45–49 are implemented for the current ASCII-only scope. Chapter 49 ad
 - [x] User confirmed vertical scrolling works after the fix
 - [x] User confirmed horizontal typing no longer closes the editor in WSL after reserving the final terminal column
 
+### Chapter 50 — Opening Files
+
+- [x] File Manager reads complete files through POSIX APIs.
+- [x] UTF-8 decoding rejects malformed sequences and invalid Unicode scalar encodings.
+- [x] LF and CRLF line endings are normalized into logical Document lines.
+- [x] Empty files are represented as zero-line Documents.
+- [x] File loading stages changes and preserves the destination Document on failure.
+- [x] Insertion into a zero-line Document creates its first logical line.
+- [x] Splitting a zero-line Document at `(0, 0)` creates two empty lines.
+- [x] Renderer safely draws a zero-line Document as a blank document area.
+- [x] Editor State loads a file and resets Cursor, Viewport, and Dirty Flag only after success.
+- [x] The application accepts an optional filename and loads it before the initial frame.
+- [x] Regression tests cover zero-line editing/rendering and Editor State load success/failure.
+- [x] CMake build and `smoke`, `editing`, and `file` CTest targets pass.
+
 ## Current Runtime Capabilities
 
 The application can now:
@@ -147,26 +162,26 @@ The current build and registered tests pass, and the user has confirmed the two 
 | Dirty Flag                                                  | Updated after successful insertion, deletion, splitting, and merging                                |
 | Full document navigation                                    | Implemented for the current ASCII-only model                                                        |
 | Viewport and scrolling                                      | Implemented; vertical and horizontal behavior manually verified in WSL                              |
-| File loading                                                | Not implemented                                                                                     |
+| File loading                                                | Implemented: UTF-8 decode, LF/CRLF normalization, empty files, startup filename                      |
 | File saving                                                 | Not implemented                                                                                     |
 | Dedicated Input Parser and command pipeline                 | Not implemented; basic input recognition remains in the event loop                                  |
 | Status Bar and Message Bar                                  | Not implemented                                                                                     |
 | Terminal resize handling                                    | Not implemented                                                                                     |
 | Unicode-aware input and display-width mapping               | Not implemented                                                                                     |
-| Automated tests                                             | `smoke` and `editing` pass; broader coverage pending                                                |
+| Automated tests                                             | `smoke`, `editing`, and `file` pass; broader coverage pending                                        |
 | Hardening and final integration                             | Pending                                                                                             |
 
 ## Current Milestone
 
-**Chapter 49 — Navigating the Document: implemented and verified for the current ASCII-only scope**
+**Chapter 50 — Opening Files: implemented through Sections 50.1–50.8**
 
-Chapter 49 adds vertical Cursor movement with preferred-column behavior, Viewport state, and vertical and horizontal scrolling. The Renderer draws the visible document region using Viewport offsets. A WSL-specific right-edge failure was addressed by initializing the Renderer with one fewer column than the terminal reports, leaving the final physical column unused. The user confirmed that vertical scrolling and the horizontal typing crash are resolved. The current build and registered tests pass.
+The File Manager reads complete files, validates UTF-8, normalizes LF/CRLF, and preserves the destination Document when loading fails. Empty files remain zero-line Documents; first insertion and Enter handle that state safely. Editor State resets Cursor, Viewport, and Dirty Flag after a successful load, and the application loads an optional filename before rendering. The build and all three registered CTest targets pass for this snapshot.
 
 ## Next Milestone
 
-**Chapter 50 — Opening Files**
+**Chapter 51 — Saving Files**
 
-Continue from the current source code. Preserve established module boundaries and identify every changed file before implementing the milestone. Implement file loading through the planned File Manager boundary; do not move file-system responsibilities into the Document, Cursor, or Renderer.
+Continue from this source state. Implement UTF-8 serialization and the safe-save workflow through the File Manager, preserving the existing module boundaries and Dirty Flag semantics.
 
 ## Current Limitations
 
@@ -174,7 +189,7 @@ Continue from the current source code. Preserve established module boundaries an
 - The terminal Delete key is not implemented; Backspace is supported.
 - UTF-8-aware input and Unicode display-width mapping are not implemented.
 - Tab expansion is not implemented.
-- File opening and saving are not implemented.
+- File opening at startup is implemented; file saving is not implemented.
 - The Dirty Flag is not yet connected to a save workflow.
 - Input handling remains temporarily inside the application event loop rather than a dedicated Input Parser, Input Engine, and Command Engine pipeline.
 - The Status Bar and Message Bar are not implemented.

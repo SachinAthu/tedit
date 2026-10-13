@@ -67,19 +67,19 @@ The exact executable location may depend on the CMake configuration.
 
 ## Running
 
-After building, run the editor with:
+After building, start a new document with:
 
 ```bash
-./build/editor
+./build/tedit
 ```
 
-To open a file:
+To open an existing file:
 
 ```bash
-./build/editor path/to/file.txt
+./build/tedit path/to/file.txt
 ```
 
-Command-line options and additional usage details will be documented as they become part of the implemented interface.
+The application currently accepts no filename or one filename. File loading supports UTF-8 and normalizes LF and CRLF line endings. File saving is planned for Chapter 51.
 
 ## Testing
 
@@ -94,7 +94,7 @@ cmake --build build
 Run the test suite:
 
 ```bash
-ctest --test-dir build
+ctest --test-dir build --output-on-failure
 ```
 
 Additional tests may be added as the editor grows.

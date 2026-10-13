@@ -398,6 +398,40 @@ static void test_renderer_uses_viewport_offsets(void)
     editor_state_destroy(&state);
 }
 
+/* A zero-line Document becomes editable on the first insertion or Enter. */
+static void test_zero_line_document_editing(void)
+{
+    Document document;
+    DocumentLine *line;
+
+    assert(document_init(&document));
+    document_destroy(&document);
+
+    assert(document_insert_character(&document, 0, 0, 'q'));
+    assert(document.line_count == 1);
+    line = document_get_line(&document, 0);
+    assert(line != NULL && line->length == 1);
+    assert(line->data[0] == (uint32_t)'q');
+
+    document_destroy(&document);
+    assert(document_init(&document));
+    document_destroy(&document);
+
+    assert(!document_insert_character(&document, 1, 0, 'q'));
+    assert(!document_insert_character(&document, 0, 1, 'q'));
+    assert(document.line_count == 0);
+
+    assert(document_split_line(&document, 0, 0));
+    assert(document.line_count == 2);
+    assert(document_get_line(&document, 0) != NULL);
+    assert(document_get_line(&document, 1) != NULL);
+    assert(document_get_line(&document, 0)->length == 0);
+    assert(document_get_line(&document, 1)->length == 0);
+    assert(!document_split_line(&document, 2, 0));
+
+    document_destroy(&document);
+}
+
 /* The renderer refuses to draw when the cursor is outside the viewport. */
 static void test_renderer_rejects_cursor_outside_viewport(void)
 {
@@ -413,6 +447,53 @@ static void test_renderer_rejects_cursor_outside_viewport(void)
     state.viewport.viewport_row = 0;
     state.viewport.viewport_column = 1;
     assert(!renderer_render(&renderer, &state));
+
+    renderer_destroy(&renderer);
+    editor_state_destroy(&state);
+}
+
+/* Rendering an empty-file Document produces a blank frame safely. */
+static void test_renderer_renders_zero_line_document(void)
+{
+    EditorState state;
+    Renderer renderer;
+    int output_pipe[2];
+    int saved_stdout;
+    char output[512];
+    ssize_t output_length;
+
+    assert(editor_state_init(&state));
+    document_destroy(&state.document); /* Model an empty file loaded from disk. */
+    cursor_init(&state.cursor);
+    viewport_init(&state.viewport);
+
+    assert(renderer_init(&renderer, 2, 3));
+    assert(pipe(output_pipe) == 0);
+    saved_stdout = dup(STDOUT_FILENO);
+    assert(saved_stdout >= 0);
+    assert(dup2(output_pipe[1], STDOUT_FILENO) == STDOUT_FILENO);
+    close(output_pipe[1]);
+
+    assert(renderer_render(&renderer, &state));
+
+    assert(dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
+    close(saved_stdout);
+    output_length = read(output_pipe[0], output, sizeof(output) - 1);
+    assert(output_length >= 0);
+    output[output_length] = '\0';
+    close(output_pipe[0]);
+
+    for (size_t row = 0; row < renderer.screen_buffer.rows; ++row)
+    {
+        for (size_t column = 0; column < renderer.screen_buffer.columns; ++column)
+        {
+            const ScreenCell *cell = screen_buffer_get(
+                &renderer.screen_buffer, row, column);
+            assert(cell != NULL && cell->code_point == (uint32_t)' ');
+        }
+    }
+
+    assert(strstr(output, "\x1b[1;1H") != NULL);
 
     renderer_destroy(&renderer);
     editor_state_destroy(&state);
@@ -568,11 +649,13 @@ int main(void)
     test_dirty_flag_initial_state();
     test_document_split_line();
     test_document_merge_lines();
+    test_zero_line_document_editing();
     test_line_editing_cursor_transitions();
     test_viewport_tracks_cursor_visibility();
     test_viewport_repeated_scrolling_and_screen_boundaries();
     test_renderer_uses_viewport_offsets();
     test_renderer_rejects_cursor_outside_viewport();
+    test_renderer_renders_zero_line_document();
     test_cursor_and_viewport_remain_synchronized_during_scrolling();
     test_terminal_disables_and_restores_autowrap();
     test_viewport_invalid_dimensions_preserve_offsets();

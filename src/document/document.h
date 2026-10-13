@@ -44,7 +44,8 @@ void document_destroy(Document *document);
 DocumentLine *document_get_line(Document *document, size_t row);
 
 /*
- * Insert one Unicode code point at column.
+ * Insert one Unicode code point at column. If the Document has zero lines,
+ * only position (0, 0) is valid and insertion creates the first line.
  */
 bool document_insert_character(Document *document, size_t row, size_t column, uint32_t code_point);
 
@@ -54,7 +55,8 @@ bool document_insert_character(Document *document, size_t row, size_t column, ui
 bool document_delete_character(Document *document, size_t row, size_t column);
 
 /*
- * Split a line at column, moving its suffix into a new line.
+ * Split a line at column, moving its suffix into a new line. For a zero-line
+ * Document, splitting at (0, 0) creates two empty logical lines.
  */
 bool document_split_line(Document *document, size_t row, size_t column);
 

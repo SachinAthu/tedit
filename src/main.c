@@ -2,6 +2,7 @@
 #include "state/editor_state.h"
 #include "renderer/renderer.h"
 
+#include <stdio.h>     /* Gives us fprintf() for command-line and startup errors. */
 #include <unistd.h>    /* Gives us read() and STDIN_FILENO (the keyboard input stream). */
 #include <stdbool.h>   /* Gives us bool, true, and false. */
 #include <sys/ioctl.h> /* Gives us ioctl(), struct winsize, and TIOCGWINSZ. */
@@ -373,13 +374,28 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
  * Program entry point. The OS calls this to start the program.
  *
  * Parameters:
- *   none.
+ *   argc - number of command-line arguments.
+ *   argv - command-line argument vector; an optional filename may follow
+ *          the executable name.
  *
  * Returns:
- *   int: the exit status. 0 means success; any non-zero value means failure.
+ *   the exit status: 0 for a clean run, nonzero for failure.
  */
-int main(void)
+int main(int argc, char *argv[])
 {
+    /*
+     * This implementation accepts either no filename (a new document) or
+     * exactly one filename (an existing document to open).
+     */
+    if (argc > 2)
+    {
+        fprintf(stderr, "Usage: %s [filename]\n", argv[0]);
+        return 1;
+    }
+
+    const char *startup_path = argc == 2 ? argv[1] : NULL;
+    bool startup_load_failed = false;
+
     /* The three main objects the editor needs while running. */
     TerminalState terminal;
     EditorState state;
@@ -439,6 +455,17 @@ int main(void)
     state_initialized = true;
 
     /*
+     * Load the requested file before initializing the Renderer or drawing
+     * the first frame. If loading fails, the shared cleanup path restores
+     * the terminal and reports the failure after leaving the alternate screen.
+     */
+    if (startup_path != NULL && !editor_state_load_file(&state, startup_path))
+    {
+        startup_load_failed = true;
+        goto cleanup;
+    }
+
+    /*
      * Reserve the terminal's final physical column. Some terminal emulators,
      * including terminals used through WSL, treat output at the right edge as
      * a pending-wrap condition even when auto-wrap is disabled. Keeping the
@@ -482,6 +509,11 @@ cleanup:
 
     /* Leave the alternate screen. */
     terminal_leave_alternate_screen(&terminal);
+
+    if (startup_load_failed)
+    {
+        fprintf(stderr, "tedit: unable to open or decode '%s'.\n", startup_path);
+    }
 
     return exit_status;
 }

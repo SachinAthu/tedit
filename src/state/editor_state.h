@@ -40,6 +40,13 @@ typedef struct
 bool editor_state_init(EditorState *state);
 
 /*
+ * Load a file into an initialized Editor State. On success, replace the
+ * Document, reset Cursor and Viewport, and clear the Dirty Flag. On failure,
+ * preserve the existing Editor State.
+ */
+bool editor_state_load_file(EditorState *state, const char *path);
+
+/*
  * Release everything the editor state owns and reset it to an empty state.
  *
  * Parameters:

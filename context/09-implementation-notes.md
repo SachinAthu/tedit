@@ -603,3 +603,18 @@ These are remaining scope boundaries, not claims that the corresponding features
 ## Next Milestone — Chapter 50: Opening Files
 
 Continue from the verified Chapter 49 source. Implement file loading through the dedicated File Manager boundary. Keep file-system operations out of the Document, Cursor, Viewport, and Renderer modules. Follow the project's established encoding and line-ending decisions, and add focused tests for successful loading, empty files, invalid paths, and read failures before integrating the load operation into application initialization.
+
+
+---
+
+## Chapter 50 — Opening Files (Sections 50.1–50.8)
+
+The File Manager reads a complete file into a byte buffer, validates and decodes UTF-8, and constructs the Document through the existing Document API. LF and CRLF are normalized to logical line boundaries. The destination Document is replaced only after the entire file has been read and decoded successfully.
+
+An empty file is represented by a Document with zero logical lines, distinct from a new unsaved Document, which contains one empty line. The Document API therefore supports two zero-line transitions: insertion at `(0, 0)` creates the first line containing the inserted code point, and splitting at `(0, 0)` creates two empty lines. Both transitions build their required allocations before publishing the new line count.
+
+The Renderer already builds each frame by clearing the Screen Buffer and skipping document rows outside `line_count`; a regression test now confirms that a zero-line Document renders as a blank area without a synthetic line. The Editor State exposes `editor_state_load_file()`, which uses the File Manager's failure-safe load contract and resets Cursor, Viewport, and the Dirty Flag only after success.
+
+`main()` accepts either no filename or one filename. A requested file is loaded after Editor State initialization but before Renderer initialization and the initial frame. Startup load failure follows the common cleanup path, restoring terminal state and leaving the alternate screen before reporting a diagnostic to standard error.
+
+Verification performed for this snapshot: CMake configuration/build succeeded and all registered CTest targets (`smoke`, `editing`, and `file`) passed. Interactive testing of startup in a real terminal remains a manual check.

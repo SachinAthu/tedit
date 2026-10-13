@@ -326,7 +326,7 @@ The user confirmed that vertical scrolling works after the auto-wrap and Cursor-
 - **Screen Buffer:** in-memory representation of the visible frame.
 - **Viewport:** tracks the first visible document row and visual column and adjusts offsets to keep the Cursor visible.
 - **Renderer:** frame construction and terminal output; it remains a read-only consumer of Editor State and uses Viewport offsets when drawing the visible region.
-- **Application Event Loop:** temporary direct input handling and coordination of editing, Cursor movement, Dirty Flag updates, and rendering.
+- **File Manager:** complete-file POSIX reads, strict UTF-8 decoding, line-ending normalization, and failure-safe Document replacement.\n- **Application Event Loop:** temporary direct input handling and coordination of editing, Cursor movement, Dirty Flag updates, and rendering.
 
 The Screen Buffer is presentation data and does not replace the Document as the authoritative text representation.
 
@@ -334,7 +334,7 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 
 - Delete-key behavior is not implemented.
 - Interactive input supports printable ASCII only; tab expansion and Unicode display-width mapping are not implemented.
-- File loading and saving are not implemented.
+- File loading is implemented for startup; saving is not implemented.
 - The Dirty Flag is not yet connected to save behavior.
 - Input Handler, Input Parser, Input Engine, and Command Engine integration is not implemented; input handling remains temporarily in `main.c`.
 - Status Bar and Message Bar are not implemented.
@@ -344,10 +344,10 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 
 ## Current Focus
 
-**Chapter 49 — Navigating the Document is complete for the current ASCII-only scope.** The auto-wrap/Viewport synchronization fix and the WSL right-edge fix are implemented. The user confirmed that vertical and horizontal scrolling now work in the terminal. The build, registered tests, and controlled pseudo-terminal interaction checks pass.
+**Chapter 50 — Opening Files is implemented through Sections 50.1–50.8.** The File Manager loads and decodes files, zero-line Documents are supported by insertion, splitting, and rendering, Editor State resets after successful loading, and `main()` accepts an optional startup filename. The clean build and three registered CTest targets pass for this snapshot.
 
 ## Next Step
 
-**Chapter 50 — Opening Files**
+**Chapter 51 — Saving Files**
 
-Begin file loading while preserving the Document, Editor State, Cursor, Viewport, and Renderer boundaries. Keep tab expansion, Unicode display-width mapping, and terminal resize handling visible as limitations.
+Implement UTF-8 serialization and the safe-save workflow through the File Manager. Keep tab expansion, Unicode display-width mapping, and terminal resize handling visible as limitations.
