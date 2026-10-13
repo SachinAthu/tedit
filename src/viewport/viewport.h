@@ -9,7 +9,7 @@
  *
  * A document can be much larger than the terminal, so the editor shows only a
  * "window" into it. `viewport_row` is the first visible line, and
- * `viewport_column` is the first visible character within that line. Both are
+ * `viewport_column` is the first visible code point within that line. Both are
  * zero-based offsets into the document.
  */
 typedef struct

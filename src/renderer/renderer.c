@@ -506,8 +506,7 @@ static size_t renderer_utf8_length(uint32_t code_point)
         return 2;
     }
 
-    if (code_point >= UINT32_C(0xD800) &&
-        code_point <= UINT32_C(0xDFFF))
+    if (code_point >= UINT32_C(0xD800) && code_point <= UINT32_C(0xDFFF))
     {
         return 0;
     }

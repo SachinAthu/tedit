@@ -90,7 +90,7 @@ void screen_buffer_clear(ScreenBuffer *buffer, uint32_t code_point)
 
     size_t cell_count = buffer->rows * buffer->columns;
 
-    /* Overwrite each cell; only the character field is used for now. */
+    /* Overwrite each cell; only the code_point field is used for now. */
     for (size_t index = 0; index < cell_count; ++index)
     {
         buffer->cells[index].code_point = code_point;

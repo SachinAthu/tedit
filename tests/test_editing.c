@@ -18,6 +18,27 @@
  * main() at the bottom simply calls every test in order.
  */
 
+/* Compare a line's code points against a NUL-terminated ASCII string. */
+static bool line_equals(const DocumentLine *line, const char *text)
+{
+    size_t length = strlen(text);
+
+    if (line == NULL || line->length != length)
+    {
+        return false;
+    }
+
+    for (size_t index = 0; index < length; ++index)
+    {
+        if (line->data[index] != (uint32_t)(unsigned char)text[index])
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static void test_document_insert_and_delete(void)
 {
     Document document;
@@ -30,17 +51,14 @@ static void test_document_insert_and_delete(void)
 
     line = document_get_line(&document, 0);
     assert(line != NULL);
-    assert(line->length == 3);
-    assert(memcmp(line->data, "abc", 3) == 0);
+    assert(line_equals(line, "abc"));
 
     assert(document_delete_character(&document, 0, 1));
-    assert(line->length == 2);
-    assert(memcmp(line->data, "ac", 2) == 0);
+    assert(line_equals(line, "ac"));
 
     assert(!document_delete_character(&document, 0, 2));
     assert(!document_delete_character(&document, 1, 0));
-    assert(line->length == 2);
-    assert(memcmp(line->data, "ac", 2) == 0);
+    assert(line_equals(line, "ac"));
 
     document_destroy(&document);
 }
@@ -170,8 +188,8 @@ static void test_document_split_line(void)
     first_line = document_get_line(&document, 0);
     second_line = document_get_line(&document, 1);
     assert(first_line != NULL && second_line != NULL);
-    assert(first_line->length == 1 && memcmp(first_line->data, "a", 1) == 0);
-    assert(second_line->length == 2 && memcmp(second_line->data, "bc", 2) == 0);
+    assert(line_equals(first_line, "a"));
+    assert(line_equals(second_line, "bc"));
 
     assert(document_split_line(&document, 1, 0));
     assert(document.line_count == 3);
@@ -205,7 +223,7 @@ static void test_document_merge_lines(void)
     assert(document.line_count == 1);
     line = document_get_line(&document, 0);
     assert(line != NULL && line->length == 4);
-    assert(memcmp(line->data, "abcd", 4) == 0);
+    assert(line_equals(line, "abcd"));
     assert(!document_merge_lines(&document, 0));
     assert(!document_merge_lines(&document, 1));
 
@@ -369,11 +387,11 @@ static void test_renderer_uses_viewport_offsets(void)
     close(output_pipe[0]);
 
     cell = screen_buffer_get(&renderer.screen_buffer, 0, 0);
-    assert(cell != NULL && cell->character == 'f');
+    assert(cell != NULL && cell->code_point == 'f');
     cell = screen_buffer_get(&renderer.screen_buffer, 0, 1);
-    assert(cell != NULL && cell->character == 'g');
+    assert(cell != NULL && cell->code_point == 'g');
     cell = screen_buffer_get(&renderer.screen_buffer, 0, 2);
-    assert(cell != NULL && cell->character == 'h');
+    assert(cell != NULL && cell->code_point == 'h');
     assert(strstr(output, "\x1b[1;2H") != NULL);
 
     renderer_destroy(&renderer);

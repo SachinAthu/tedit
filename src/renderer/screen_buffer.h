@@ -8,8 +8,8 @@
 /*
  * A single character cell on the screen grid.
  *
- * For now a cell only stores one character; later it could grow to also hold
- * colors or styles.
+ * For now a cell only stores one Unicode code point; later it could grow to
+ * also hold colors or styles.
  */
 typedef struct
 {

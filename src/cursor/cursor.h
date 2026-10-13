@@ -10,7 +10,7 @@
  * The position of the text cursor within a document.
  *
  *   - row:             which line the cursor is on (zero-based).
- *   - column:          which character within that line (zero-based).
+ *   - column:          which code point within that line (zero-based).
  *   - preferred_column: the column the user last chose horizontally. It is
  *                       remembered so that moving up or down across lines of
  *                       different lengths keeps the cursor at a sensible spot.

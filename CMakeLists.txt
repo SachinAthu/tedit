@@ -21,6 +21,7 @@ add_library(
     src/viewport/viewport.c
     src/renderer/screen_buffer.c
     src/renderer/renderer.c
+    src/file/file.c
 )
 
 target_include_directories(tedit_core PUBLIC src)
@@ -36,8 +37,12 @@ target_link_libraries(tedit PRIVATE tedit_core)
 
 add_executable(test_smoke tests/test_smoke.c)
 add_executable(test_editing tests/test_editing.c)
+add_executable(test_file tests/test_file.c)
 
+target_link_libraries(test_smoke PRIVATE tedit_core)
 target_link_libraries(test_editing PRIVATE tedit_core)
+target_link_libraries(test_file PRIVATE tedit_core)
 
 add_test(NAME smoke COMMAND test_smoke)
 add_test(NAME editing COMMAND test_editing)
+add_test(NAME file COMMAND test_file)
