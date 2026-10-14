@@ -79,6 +79,26 @@ bool editor_state_load_file(EditorState *state, const char *path)
  * Returns:
  *   void.
  */
+/*
+ * Save the current Document through the File Manager.
+ * The Document and Dirty Flag remain unchanged on every failure.
+ */
+bool editor_state_save_file(EditorState *state, const char *path)
+{
+    if (state == NULL || path == NULL)
+    {
+        return false;
+    }
+
+    if (file_save_document(path, &state->document) != FILE_SAVE_OK)
+    {
+        return false;
+    }
+
+    state->is_dirty = false;
+    return true;
+}
+
 void editor_state_destroy(EditorState *state)
 {
     if (state == NULL)

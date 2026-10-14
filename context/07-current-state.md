@@ -6,11 +6,11 @@ Terminal text editor implementation in C99 for Linux/POSIX, developed incrementa
 
 ## Current Milestone
 
-**Chapter 49 — Navigating the Document: complete for the current ASCII-only scope**
+**Chapter 51 — Saving Files: Sections 51.2–51.5 implemented; interface feedback remains pending**
 
-Chapters 48 and 49 so far add logical-line splitting and merging, vertical Cursor movement with preferred-column preservation, and a two-offset Viewport for vertical and horizontal scrolling. The Renderer now draws the visible document region, and the event loop maintains Cursor visibility before redrawing. Enter (`0x0D`) and line feed (`0x0A`) split the current logical line at the Cursor. Backspace deletes the preceding character when the Cursor is inside a line; at column zero, it merges the current line into the previous line when one exists. The Cursor and Dirty Flag are updated after successful edits, and the screen is redrawn.
+The current implementation supports opening a file supplied at startup and saving changes back to that same path with Ctrl-S. The File Manager serializes the complete Document as UTF-8 using canonical LF line endings and safe temporary-file replacement. Editor State clears the Dirty Flag only after a successful save. The existing direct input loop remains in place; Save As for unnamed Documents and visible save feedback are not yet implemented because the Message Bar is still pending.
 
-The build and registered CTest targets (`smoke` and `editing`) pass. Manual testing in WSL exposed two terminal-edge defects. First, full-width frame writes could interact with terminal auto-wrap and make the physical screen drift from the logical Viewport. The terminal runtime now disables auto-wrap while the editor is active and restores it during cleanup, and the Renderer validates Cursor coordinates before emitting terminal positioning sequences. Second, horizontal scrolling could make the application exit when a line reached the terminal's right edge. The application now initializes the Renderer with `columns - 1`, reserving the terminal's final physical column. The user confirmed that the horizontal edge issue is fixed in WSL. Regression tests cover repeated vertical/horizontal scrolling, invalid Renderer Cursor coordinates, and terminal-mode restoration.
+CMake configuration and build succeed, and all four registered CTest targets (`smoke`, `editing`, `file`, and `file_save`) pass. A pseudo-terminal integration check verified that an edit is persisted after Ctrl-S. Earlier manual testing in WSL also confirmed that reserving the terminal's final physical column prevents the right-edge behavior that affected horizontal scrolling.
 
 ## Completed
 
@@ -110,7 +110,7 @@ The build and registered CTest targets (`smoke` and `editing`) pass. Manual test
 - `is_dirty` initializes to `false`.
 - Successful character insertion sets the flag to `true`.
 - Successful character deletion sets the flag to `true`.
-- The flag is not yet cleared by a save operation because file saving is not implemented.
+- `editor_state_save_file()` clears the flag only after a successful File Manager save; interactive save integration is pending.
 
 #### Interactive Editing Loop
 
@@ -326,7 +326,8 @@ The user confirmed that vertical scrolling works after the auto-wrap and Cursor-
 - **Screen Buffer:** in-memory representation of the visible frame.
 - **Viewport:** tracks the first visible document row and visual column and adjusts offsets to keep the Cursor visible.
 - **Renderer:** frame construction and terminal output; it remains a read-only consumer of Editor State and uses Viewport offsets when drawing the visible region.
-- **File Manager:** complete-file POSIX reads, strict UTF-8 decoding, line-ending normalization, and failure-safe Document replacement.\n- **Application Event Loop:** temporary direct input handling and coordination of editing, Cursor movement, Dirty Flag updates, and rendering.
+- **File Manager:** complete-file POSIX reads, strict UTF-8 decoding, line-ending normalization, UTF-8 serialization, and temporary-file replacement.
+- **Application Event Loop:** temporary direct input handling and coordination of editing, Cursor movement, Dirty Flag updates, and rendering.
 
 The Screen Buffer is presentation data and does not replace the Document as the authoritative text representation.
 
@@ -334,8 +335,7 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 
 - Delete-key behavior is not implemented.
 - Interactive input supports printable ASCII only; tab expansion and Unicode display-width mapping are not implemented.
-- File loading is implemented for startup; saving is not implemented.
-- The Dirty Flag is not yet connected to save behavior.
+- File loading and Ctrl-S saving to the startup filename are implemented; Save As and visible save feedback are not implemented.
 - Input Handler, Input Parser, Input Engine, and Command Engine integration is not implemented; input handling remains temporarily in `main.c`.
 - Status Bar and Message Bar are not implemented.
 - Terminal resizing and Screen Buffer reinitialization are not implemented.
@@ -344,10 +344,32 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 
 ## Current Focus
 
-**Chapter 50 — Opening Files is implemented through Sections 50.1–50.8.** The File Manager loads and decodes files, zero-line Documents are supported by insertion, splitting, and rendering, Editor State resets after successful loading, and `main()` accepts an optional startup filename. The clean build and three registered CTest targets pass for this snapshot.
+**Chapter 51 — Saving Files is implemented through Section 51.5 for the existing-file workflow.** Ctrl-S calls the Editor State save API when a startup filename exists. Failure-path tests cover serialization and replacement failures, including destination preservation, Dirty Flag preservation, and temporary-file cleanup. The build, four CTest targets, and a pseudo-terminal save integration check pass. Save As and Message Bar feedback remain pending.
 
 ## Next Step
 
-**Chapter 51 — Saving Files**
+**Next milestone — Chapter 52: Completing the Editor Interface**
 
-Implement UTF-8 serialization and the safe-save workflow through the File Manager. Keep tab expansion, Unicode display-width mapping, and terminal resize handling visible as limitations.
+The Chapter 51 save path has been reviewed for the supported success and failure paths. The current loop recognizes Ctrl-S and saves to the startup filename. The Message Bar does not exist yet, so interactive success/failure feedback belongs in Chapter 52. Save As for unnamed Documents remains unimplemented. Do not introduce the later Input Parser / Command Engine architecture prematurely.
+
+## Chapter 51 Progress — Saving Through Editor State (Sections 51.2–51.3)
+
+The File Manager serializes a complete Document as UTF-8 and writes canonical LF after every logical line. A zero-line Document serializes to a zero-byte file. Saving uses a temporary file created beside the destination, checks buffered writes (including partial writes and `EINTR`), closes the file, and renames it over the destination only after successful serialization. Failed saves remove the temporary file where possible and do not replace the destination.
+
+`editor_state_save_file()` coordinates saving for Editor State. It returns success only when the File Manager returns `FILE_SAVE_OK`; only then does it clear `is_dirty`. On invalid arguments or any File Manager failure, the Dirty Flag and in-memory Document remain unchanged. Ctrl-S invokes this API when the application has a startup filename. Ctrl-S remains a no-op for unnamed Documents; visible feedback is deferred until the Message Bar exists.
+
+Verification for this snapshot: CMake build succeeded and all four registered CTest targets (`smoke`, `editing`, `file`, and `file_save`) passed. The save tests cover UTF-8 output, LF after each logical line, zero-line output, successful Dirty Flag clearing, and failure preservation of the Document, Dirty Flag, and existing destination contents.
+
+
+## Chapter 51 Progress — Event Loop Integration (Section 51.4)
+
+The existing direct input loop now recognizes Ctrl-S (`0x13`). When the application was started with a filename, Ctrl-S calls `editor_state_save_file()` for that path. A failed save does not clear the Dirty Flag and does not terminate the Event Loop. Ctrl-S on an unnamed Document is currently a no-op; Save As is not implemented. Visible save feedback is deferred until the Message Bar exists, rather than adding a second terminal-output path in `main.c`.
+
+Verification: CMake configure/build succeeded; all four CTest targets passed. A pseudo-terminal integration check launched the editor with a file, inserted a character, sent Ctrl-S and Ctrl-Q, and confirmed the destination contained the updated text.
+
+
+### Chapter 51 Progress — Failure-Path Review (Section 51.5)
+
+Added a replacement-failure regression test by attempting to save over an existing directory. The test confirms that the operation fails, the Editor State Dirty Flag remains set, the in-memory Document remains unchanged, the directory remains intact, and the temporary file is removed. This complements the existing invalid-code-point failure test, which verifies that an existing destination file is not replaced.
+
+Verification: CMake configure/build succeeded and all four CTest targets (`smoke`, `editing`, `file`, and `file_save`) passed. Save success was already checked through a pseudo-terminal session in Section 51.4; visible success/failure feedback remains deferred until the Message Bar is available.

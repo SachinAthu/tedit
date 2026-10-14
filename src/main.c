@@ -16,6 +16,8 @@
  * A #define is a text replacement: everywhere CONTROL_Q appears, the compiler
  * substitutes 0x11. Using a name instead of a bare number makes it readable. */
 #define CONTROL_Q 0x11
+/* Ctrl-S requests a save of the file opened at startup. */
+#define CONTROL_S 0x13
 /* The bytes a terminal sends for common editing keys. 0x7F is the classic
  * Backspace key; 0x08 (Ctrl-H) is an older alternative some setups send. */
 #define BACKSPACE 0x7F
@@ -181,7 +183,7 @@ static bool redraw_after_action(Renderer *renderer, EditorState *state)
  * Returns:
  *   bool: true if the loop completed successfully, false otherwise.
  */
-static bool application_event_loop(EditorState *state, Renderer *renderer)
+static bool application_event_loop(EditorState *state, Renderer *renderer, const char *save_path)
 {
     if (state == NULL || renderer == NULL)
     {
@@ -219,6 +221,22 @@ static bool application_event_loop(EditorState *state, Renderer *renderer)
         if (bytes_read == 0 || input == CONTROL_Q)
         {
             return true;
+        }
+
+        /*
+         * Ctrl-S saves back to the path supplied at startup. Save As for a
+         * new, unnamed Document is not part of this milestone. Save failures
+         * leave Editor State unchanged. The Message Bar will provide visible
+         * feedback when the interface is implemented in the next chapter.
+         */
+        if (input == CONTROL_S)
+        {
+            if (save_path != NULL)
+            {
+                (void)editor_state_save_file(state, save_path);
+            }
+
+            continue;
         }
 
         if (input == ESCAPE)
@@ -486,7 +504,7 @@ int main(int argc, char *argv[])
     }
 
     /* Hand control to the main loop until the user quits. */
-    if (application_event_loop(&state, &renderer))
+    if (application_event_loop(&state, &renderer, startup_path))
     {
         exit_status = 0;
     }

@@ -600,7 +600,7 @@ These are remaining scope boundaries, not claims that the corresponding features
 
 ---
 
-## Next Milestone — Chapter 50: Opening Files
+## Previous Milestone — Chapter 50: Opening Files
 
 Continue from the verified Chapter 49 source. Implement file loading through the dedicated File Manager boundary. Keep file-system operations out of the Document, Cursor, Viewport, and Renderer modules. Follow the project's established encoding and line-ending decisions, and add focused tests for successful loading, empty files, invalid paths, and read failures before integrating the load operation into application initialization.
 
@@ -618,3 +618,29 @@ The Renderer already builds each frame by clearing the Screen Buffer and skippin
 `main()` accepts either no filename or one filename. A requested file is loaded after Editor State initialization but before Renderer initialization and the initial frame. Startup load failure follows the common cleanup path, restoring terminal state and leaving the alternate screen before reporting a diagnostic to standard error.
 
 Verification performed for this snapshot: CMake configuration/build succeeded and all registered CTest targets (`smoke`, `editing`, and `file`) passed. Interactive testing of startup in a real terminal remains a manual check.
+
+## Chapter 51 — Save Integration (Sections 51.2–51.3)
+
+`file_save_document()` serializes the Document at the File Manager boundary. It encodes Unicode code points to UTF-8, rejects surrogate values and values above U+10FFFF, appends LF after every logical line, and emits no bytes for a zero-line Document. The implementation writes to a `mkstemp()` file using a suffix appended to the destination path, buffers output, retries interrupted writes, handles partial writes, checks `close()`, and calls `rename()` only after the full output succeeds. It unlinks the temporary path after a failure where possible. `fsync()` durability, destination metadata preservation, and crash recovery for orphaned temporary files remain outside the baseline scope.
+
+`editor_state_save_file()` is the Editor State coordination boundary. It returns `false` for invalid arguments or a File Manager error and leaves `is_dirty` unchanged. It sets `is_dirty = false` only after `file_save_document()` returns `FILE_SAVE_OK`. Tests verify success, invalid arguments, a serializer failure that leaves an existing destination untouched, and zero-line serialization. The Event Loop has not yet been connected to this API.
+
+Current verification: configure/build succeeds; `smoke`, `editing`, `file`, and `file_save` pass under CTest.
+
+
+### Chapter 51 — Section 51.4: Event Loop Integration
+
+The current direct input loop recognizes Ctrl-S (`0x13`). The optional startup filename is passed into `application_event_loop()`. When it is non-NULL, Ctrl-S calls `editor_state_save_file()` with that path. The result is intentionally not used to terminate the loop: failed saves preserve the Dirty Flag through the Editor State API and the user can continue editing.
+
+This integration intentionally does not implement Save As for a new unnamed Document. It also does not print status text directly from `main.c`; doing so would create a competing terminal-output path before the Message Bar exists. Visible success/failure feedback is deferred to the interface chapter.
+
+Verification: CMake configuration/build succeeded and all four CTest targets (`smoke`, `editing`, `file`, `file_save`) passed. A pseudo-terminal check launched the application with a file, typed `X`, sent Ctrl-S and Ctrl-Q, then verified the destination contained `Xoriginal\n`.
+
+
+### Chapter 51 — Section 51.5: Failure-Path Review
+
+Added a regression case for the atomic replacement failure path. The test creates a directory at the requested destination path, then asks `editor_state_save_file()` to save there. Temporary-file creation and serialization can succeed, but `rename()` must fail when replacing the directory. The test verifies the call reports failure, `is_dirty` remains true, the in-memory character remains unchanged, the directory remains present, and no sibling temporary file with the generated `.tedit-` prefix remains in `/tmp`.
+
+The earlier invalid-code-point test continues to exercise a serialization failure and verifies that an existing destination file remains byte-for-byte unchanged. These tests do not simulate kernel-level write or close failures; those paths remain guarded in the implementation but are not directly injected by the current test harness. `fsync()` durability and destination metadata preservation remain explicitly deferred by the baseline design.
+
+Verification for Section 51.5: the standard CMake configure/build succeeded; a separate build with `-Wall -Wextra -Wpedantic -Werror` succeeded; `smoke`, `editing`, `file`, and `file_save` passed in both builds. Pseudo-terminal checks verified both successful Ctrl-S persistence and that a replacement failure does not terminate the Event Loop; the failure case also confirmed temporary-file cleanup. Chapter 51 is complete for the current existing-file save workflow. The next milestone is Chapter 52, where the Message Bar should provide visible save feedback without bypassing the Renderer/terminal output path.

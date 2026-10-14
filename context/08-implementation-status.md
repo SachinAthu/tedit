@@ -4,7 +4,7 @@
 
 **Active — Volume X implementation**
 
-Chapters 45–49 remain implemented as the navigation baseline. Chapter 50 has now been implemented through Sections 50.1–50.8 in the current source snapshot: UTF-8 file loading, LF/CRLF normalization, zero-line Document handling, Editor State reset after successful loading, and optional filename startup. A clean build and all three registered CTest targets (`smoke`, `editing`, and `file`) pass for this snapshot.
+Chapters 45–50 are implemented in the current source snapshot. Chapter 51 now covers UTF-8 serialization, safe temporary-file replacement, Editor State Dirty Flag handling, Ctrl-S integration for the startup filename, and failure-path regression checks. A clean CMake build and all four registered CTest targets (`smoke`, `editing`, `file`, and `file_save`) pass.
 
 ## Completed
 
@@ -163,7 +163,7 @@ The current build and registered tests pass, and the user has confirmed the two 
 | Full document navigation                                    | Implemented for the current ASCII-only model                                                        |
 | Viewport and scrolling                                      | Implemented; vertical and horizontal behavior manually verified in WSL                              |
 | File loading                                                | Implemented: UTF-8 decode, LF/CRLF normalization, empty files, startup filename                      |
-| File saving                                                 | Not implemented                                                                                     |
+| File saving                                                 | File Manager + Editor State API + Ctrl-S for startup filename implemented; Save As and feedback pending |
 | Dedicated Input Parser and command pipeline                 | Not implemented; basic input recognition remains in the event loop                                  |
 | Status Bar and Message Bar                                  | Not implemented                                                                                     |
 | Terminal resize handling                                    | Not implemented                                                                                     |
@@ -173,15 +173,15 @@ The current build and registered tests pass, and the user has confirmed the two 
 
 ## Current Milestone
 
-**Chapter 50 — Opening Files: implemented through Sections 50.1–50.8**
+**Chapter 51 — Saving Files: implemented through Section 51.5 for the existing-file workflow**
 
-The File Manager reads complete files, validates UTF-8, normalizes LF/CRLF, and preserves the destination Document when loading fails. Empty files remain zero-line Documents; first insertion and Enter handle that state safely. Editor State resets Cursor, Viewport, and Dirty Flag after a successful load, and the application loads an optional filename before rendering. The build and all three registered CTest targets pass for this snapshot.
+The File Manager serializes the Document as UTF-8 with canonical LF line endings, writes through a same-directory temporary file, checks writes and close, and atomically replaces the destination with `rename()`. Editor State clears the Dirty Flag only after successful replacement. Ctrl-S saves to the startup filename. Failure tests cover invalid scalar data and replacement failure, including destination/state preservation and temporary-file cleanup. Save As and Message Bar feedback remain pending.
 
 ## Next Milestone
 
-**Chapter 51 — Saving Files**
+**Chapter 52 — Completing the Editor Interface**
 
-Continue from this source state. Implement UTF-8 serialization and the safe-save workflow through the File Manager, preserving the existing module boundaries and Dirty Flag semantics.
+Chapter 51 is implemented through Section 51.5 for saving an existing file. Next, implement the Status Bar and Message Bar according to the project architecture. Use the Message Bar to surface save success and failure without adding direct status output to `main.c`. Save As for unnamed Documents remains out of scope unless the project requirements explicitly call for it.
 
 ## Current Limitations
 
@@ -189,10 +189,48 @@ Continue from this source state. Implement UTF-8 serialization and the safe-save
 - The terminal Delete key is not implemented; Backspace is supported.
 - UTF-8-aware input and Unicode display-width mapping are not implemented.
 - Tab expansion is not implemented.
-- File opening at startup is implemented; file saving is not implemented.
-- The Dirty Flag is not yet connected to a save workflow.
+- Ctrl-S saves to the filename supplied at startup; Save As for an unnamed Document is not implemented.
+- Save feedback is pending the Message Bar.
 - Input handling remains temporarily inside the application event loop rather than a dedicated Input Parser, Input Engine, and Command Engine pipeline.
 - The Status Bar and Message Bar are not implemented.
 - Terminal resize handling and frame reinitialization are not implemented.
 - Comprehensive automated testing, broader failure-path regression testing, hardening, and final integration remain future work.
 - The Renderer deliberately reserves the terminal's final physical column to avoid the right-edge wrapping behavior observed in WSL; this reduces the usable rendering width by one column.
+
+## Chapter 51 — Saving Files (Sections 51.2–51.5)
+
+- [x] File Manager UTF-8 serialization with invalid-code-point validation.
+- [x] Canonical LF output after each logical line; zero-line Document produces a zero-byte file.
+- [x] Temporary file in the destination directory, complete buffered writes, close checking, and atomic rename replacement.
+- [x] `editor_state_save_file()` delegates to the File Manager and clears `is_dirty` only after success.
+- [x] Failed save preserves the in-memory Document, Dirty Flag, and prior destination contents in the tested failure case.
+- [x] CMake build and all four CTest targets (`smoke`, `editing`, `file`, `file_save`) pass.
+- [x] Connect Ctrl-S to the Editor State save API for a startup filename.
+- [x] Verify end-to-end save behavior through a pseudo-terminal session.
+- [ ] Add visible success/failure feedback when the Message Bar is implemented.
+- [ ] Decide whether Save As belongs in the implementation scope; currently Ctrl-S is a no-op for an unnamed Document.
+- [x] Complete the current failure-path review; broader injected write/close failures remain part of later hardening.
+
+
+### Section 51.4 — Event Loop Integration
+
+- [x] Added the Ctrl-S control byte (`0x13`) to the current direct input loop.
+- [x] Passed the optional startup filename to the Event Loop and save to that path.
+- [x] Save failure does not terminate the Event Loop or clear the Dirty Flag.
+- [x] CMake build and all four CTest targets pass.
+- [x] Pseudo-terminal check verified edited contents are persisted after Ctrl-S.
+- [ ] Visible save feedback remains pending the Message Bar.
+- [ ] Save As for an unnamed Document is not implemented.
+
+### Section 51.5 — Failure-Path Review
+
+- [x] Verify invalid scalar data fails before destination replacement.
+- [x] Verify a failed save preserves the Dirty Flag and in-memory Document.
+- [x] Verify a failed save preserves existing destination contents.
+- [x] Verify a rename/replacement failure leaves an existing directory intact.
+- [x] Verify failed replacement cleans up its temporary file.
+- [x] Reconfigure and rebuild the project successfully.
+- [x] Pass all four CTest targets.
+- [x] Pass a separate warning-clean build with `-Wall -Wextra -Wpedantic -Werror`.
+- [x] Verify successful save and recoverable replacement failure in pseudo-terminal integration checks.
+- [x] Keep visible save feedback deferred to the Message Bar implementation.

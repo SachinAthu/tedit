@@ -69,3 +69,5 @@ CTestTestfile.cmake
 *.pdb
 gmon.out
 .clang-format-ignore
+
+/sample*

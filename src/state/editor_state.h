@@ -46,6 +46,9 @@ bool editor_state_init(EditorState *state);
  */
 bool editor_state_load_file(EditorState *state, const char *path);
 
+/* Save the current Document. Clear the Dirty Flag only after success. */
+bool editor_state_save_file(EditorState *state, const char *path);
+
 /*
  * Release everything the editor state owns and reset it to an empty state.
  *
