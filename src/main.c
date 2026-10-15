@@ -9,31 +9,34 @@
 
 #include <errno.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdio.h>
-#include <sys/ioctl.h>
 #include <sys/select.h>
 #include <unistd.h>
 
+/*
+ * How long to wait for the bytes that may follow an ESC key press before
+ * deciding the user pressed Escape alone. Long enough for terminals to
+ * deliver the rest of an arrow-key sequence, short enough that a lone ESC
+ * press still feels instant.
+ */
 #define ESCAPE_TIMEOUT_MICROSECONDS 50000
 
-static bool get_terminal_size(size_t *rows, size_t *columns)
-{
-    struct winsize window_size;
-
-    if (rows == NULL || columns == NULL ||
-        ioctl(STDOUT_FILENO, TIOCGWINSZ, &window_size) == -1 ||
-        window_size.ws_row == 0 || window_size.ws_col == 0)
-    {
-        return false;
-    }
-
-    *rows = window_size.ws_row;
-    *columns = window_size.ws_col;
-    return true;
-}
-
-/* Read one byte while allowing an incomplete Escape sequence to time out. */
+/*
+ * Read a single byte from standard input, waiting at most
+ * ESCAPE_TIMEOUT_MICROSECONDS for it to arrive.
+ *
+ * Used only while the Input Parser is inside an incomplete Escape sequence.
+ * Arrow keys and friends arrive as several bytes, but a lone ESC key is
+ * followed by nothing; the timeout lets us report it as an Escape event
+ * instead of blocking forever.
+ *
+ * Parameters:
+ *   byte - out-parameter: receives the byte read on success.
+ *
+ * Returns:
+ *   1 if one byte was read, 0 if the wait timed out or the input stream
+ *   closed, -1 on a read error. `byte` is written only when 1 is returned.
+ */
 static int read_escape_byte(unsigned char *byte)
 {
     fd_set read_set;
@@ -74,6 +77,21 @@ static int read_escape_byte(unsigned char *byte)
     }
 }
 
+/*
+ * Bring the cursor back into view (scrolling the Viewport if needed) and
+ * redraw the whole screen.
+ *
+ * Called after every command that may have moved the cursor or changed the
+ * document, so what is shown always matches the editor state.
+ *
+ * Parameters:
+ *   renderer - the renderer that owns the off-screen frame buffer.
+ *   state    - the current editor state to scroll and draw; not modified.
+ *
+ * Returns:
+ *   true if the frame was drawn, false on NULL arguments or if scrolling or
+ *   rendering failed.
+ */
 static bool redraw_after_action(Renderer *renderer, EditorState *state)
 {
     if (renderer == NULL || state == NULL)
@@ -94,6 +112,24 @@ static bool redraw_after_action(Renderer *renderer, EditorState *state)
     return renderer_render(renderer, state);
 }
 
+/*
+ * Run the editor's main loop until the user quits.
+ *
+ * Each iteration performs the whole pipeline: read one byte, let the Input
+ * Parser turn bytes into a key event, translate that event into a command,
+ * execute the command against the editor state, and redraw when anything
+ * changed.
+ *
+ * Parameters:
+ *   state     - the editor state to operate on.
+ *   renderer  - the renderer used to redraw after each command.
+ *   save_path - path passed on the command line; used as the save target
+ *               when the document has no file path of its own yet. May be
+ *               NULL.
+ *
+ * Returns:
+ *   true when the user quit normally, false on an unrecoverable error.
+ */
 static bool application_event_loop(EditorState *state, Renderer *renderer, const char *save_path)
 {
     InputParser parser;
@@ -107,6 +143,12 @@ static bool application_event_loop(EditorState *state, Renderer *renderer, const
         bool should_quit;
         bool event_ready = false;
 
+        /*
+         * While the parser is in the middle of an Escape sequence, the next
+         * byte must arrive quickly or not at all: read with a timeout so a
+         * lone ESC press is handled promptly. Otherwise a plain blocking
+         * read is enough.
+         */
         if (input_parser_is_waiting(&parser))
         {
             read_result = read_escape_byte(&byte);
@@ -155,6 +197,11 @@ static bool application_event_loop(EditorState *state, Renderer *renderer, const
         {
             return true;
         }
+
+        /*
+         * Feed the byte into the parser; it returns true once a complete key
+         * event is ready (or when a timeout already produced one above).
+         */
         if (!event_ready && !input_parser_feed(&parser, byte, &event))
         {
             return false;
@@ -163,6 +210,7 @@ static bool application_event_loop(EditorState *state, Renderer *renderer, const
         EditorCommand command;
         bool redraw;
 
+        /* Pipeline step by step: event -> command -> state change -> redraw. */
         if (!input_engine_translate(&event, &command))
         {
             return false;
@@ -182,6 +230,21 @@ static bool application_event_loop(EditorState *state, Renderer *renderer, const
     }
 }
 
+/*
+ * Program entry point.
+ *
+ * Sets up the terminal (raw mode + alternate screen), initializes the editor
+ * state, optionally loads the file named on the command line, runs the event
+ * loop, and then restores everything - including after errors - before
+ * returning to the shell.
+ *
+ * Parameters:
+ *   argc - number of command-line arguments.
+ *   argv - argument vector; argv[1] may name a file to open.
+ *
+ * Returns:
+ *   0 on a clean exit, 1 on any startup or runtime error.
+ */
 int main(int argc, char *argv[])
 {
     if (argc > 2)
@@ -195,8 +258,6 @@ int main(int argc, char *argv[])
     TerminalState terminal;
     EditorState state;
     Renderer renderer;
-    size_t rows;
-    size_t columns;
     bool state_initialized = false;
     bool renderer_initialized = false;
     int exit_status = 1;
@@ -215,10 +276,6 @@ int main(int argc, char *argv[])
         terminal_restore(&terminal);
         return 1;
     }
-    if (!get_terminal_size(&rows, &columns))
-    {
-        goto cleanup;
-    }
     if (!editor_state_init(&state))
     {
         goto cleanup;
@@ -230,7 +287,7 @@ int main(int argc, char *argv[])
         startup_load_failed = true;
         goto cleanup;
     }
-    if (columns < 2 || !renderer_init(&renderer, rows, columns - 1))
+    if (terminal.columns < 2 || !renderer_init(&renderer, terminal.rows, terminal.columns - 1))
     {
         goto cleanup;
     }

@@ -4,6 +4,16 @@
 #include <string.h>
 #include <stdlib.h>
 
+/*
+ * Initialize an EditorState to a fresh, empty, not-dirty document.
+ *
+ * Parameters:
+ *   state - the state to initialize; must not be NULL.
+ *
+ * Returns:
+ *   true on success, false if `state` is NULL or allocation failed. On
+ *   failure the state is left zeroed and safe to inspect.
+ */
 bool editor_state_init(EditorState *state)
 {
     if (state == NULL)
@@ -34,6 +44,21 @@ bool editor_state_init(EditorState *state)
     return true;
 }
 
+/*
+ * Replace the current document with the contents of the UTF-8 file at `path`.
+ *
+ * The path string is copied up front (so the caller may free its own), but
+ * the current document, file association, and dirty flag are only replaced
+ * after the file loads and decodes successfully; on failure nothing changes.
+ *
+ * Parameters:
+ *   state - the state to update; must not be NULL.
+ *   path  - path of the file to load; must not be NULL.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, allocation failure, or if the
+ *   file could not be opened, read, or decoded.
+ */
 bool editor_state_load_file(EditorState *state, const char *path)
 {
     if (state == NULL || path == NULL)
@@ -78,6 +103,18 @@ bool editor_state_load_file(EditorState *state, const char *path)
     return true;
 }
 
+/*
+ * Write the document to the file at `path` and clear the dirty flag.
+ *
+ * Parameters:
+ *   state - the state whose document is saved; must not be NULL.
+ *   path  - destination path; must not be NULL.
+ *
+ * Returns:
+ *   true if the file was written and the dirty flag cleared, false on NULL
+ *   arguments or a write failure. On failure the dirty flag stays set so
+ *   unsaved work is never silently lost.
+ */
 bool editor_state_save_file(EditorState *state, const char *path)
 {
     if (state == NULL || path == NULL)
@@ -94,6 +131,22 @@ bool editor_state_save_file(EditorState *state, const char *path)
     return true;
 }
 
+/*
+ * Write the document to a new path and remember that path as the file
+ * association.
+ *
+ * The new path is allocated before anything is written, and the old
+ * association is replaced only after the save succeeds - so a failed save
+ * keeps both the document and its previous file association intact.
+ *
+ * Parameters:
+ *   state - the state to update; must not be NULL.
+ *   path  - destination path; must not be NULL or empty.
+ *
+ * Returns:
+ *   true if the file was written, the new path became the association, and
+ *   the dirty flag was cleared; false otherwise.
+ */
 bool editor_state_save_as(EditorState *state, const char *path)
 {
     char *new_path;
@@ -129,6 +182,16 @@ bool editor_state_save_as(EditorState *state, const char *path)
     return true;
 }
 
+/*
+ * Copy `message` into the state's Message Bar text.
+ *
+ * Parameters:
+ *   state   - the state to update; must not be NULL.
+ *   message - the text to show; must not be NULL.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments.
+ */
 bool editor_state_set_message(EditorState *state, const char *message)
 {
     size_t length;
@@ -138,6 +201,7 @@ bool editor_state_set_message(EditorState *state, const char *message)
         return false;
     }
 
+    /* Copy at most a full buffer's worth, leaving room for the terminator. */
     length = strlen(message);
     if (length >= sizeof(state->message))
     {
@@ -149,6 +213,16 @@ bool editor_state_set_message(EditorState *state, const char *message)
     return true;
 }
 
+/*
+ * Release all storage owned by the state and reset it to a safe, empty
+ * state.
+ *
+ * Parameters:
+ *   state - the state to destroy; may be NULL.
+ *
+ * Returns:
+ *   void.
+ */
 void editor_state_destroy(EditorState *state)
 {
     if (state == NULL)

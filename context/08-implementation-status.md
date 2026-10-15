@@ -149,26 +149,26 @@ The current build and registered tests pass, and the user has confirmed the two 
 | Repository and Git workflow                                 | Established                                                                                         |
 | CMake and C99 configuration                                 | Established                                                                                         |
 | Terminal initialization, raw mode, restoration, and cleanup | Implemented                                                                                         |
-| Application lifecycle and event loop                        | Implemented; complete parser-to-command pipeline                                                       |
+| Application lifecycle and event loop                        | Implemented; complete parser-to-command pipeline                                                    |
 | Editor State                                                | Implemented                                                                                         |
 | Document                                                    | Vector of logical lines; insertion, deletion, splitting, and merging implemented                    |
 | Cursor                                                      | Validated logical position, horizontal and vertical movement, preferred-column behavior implemented |
 | Viewport                                                    | Vertical and horizontal offsets and Cursor visibility maintenance implemented                       |
 | Screen Buffer                                               | Implemented                                                                                         |
-| Renderer                                                    | Full redraw; bottom Status Bar, styled Message Bar, and separator row                                 |
-| Unicode character insertion                                | UTF-8 input events and Unicode scalar insertion implemented                                              |
+| Renderer                                                    | Full redraw; bottom Status Bar, styled Message Bar, and separator row                               |
+| Unicode character insertion                                 | UTF-8 input events and Unicode scalar insertion implemented                                         |
 | Backspace character deletion and line merging               | Implemented                                                                                         |
 | Enter and logical-line splitting                            | Implemented                                                                                         |
 | Dirty Flag                                                  | Updated after successful insertion, deletion, splitting, and merging                                |
-| Cursor navigation                                           | Arrow-key movement implemented; Home, End, Page Up, and Page Down deferred                              |
+| Cursor navigation                                           | Arrow-key movement implemented; Home, End, Page Up, and Page Down deferred                          |
 | Viewport and scrolling                                      | Implemented; vertical and horizontal behavior manually verified in WSL                              |
-| File loading                                                | Implemented: UTF-8 decode, LF/CRLF normalization, empty files, startup filename                      |
-| File saving                                                 | Safe save implemented; Ctrl-S saves current path or opens filename entry for unnamed documents       |
-| Dedicated Input Parser and command pipeline                 | Input Parser, Input Engine, and Command Engine implemented                                             |
-| Status Bar and Message Bar                                  | Implemented; Status Bar bottom, white Message Bar, one-row separator                                   |
+| File loading                                                | Implemented: UTF-8 decode, LF/CRLF normalization, empty files, startup filename                     |
+| File saving                                                 | Safe save implemented; Ctrl-S saves current path or opens filename entry for unnamed documents      |
+| Dedicated Input Parser and command pipeline                 | Input Parser, Input Engine, and Command Engine implemented                                          |
+| Status Bar and Message Bar                                  | Implemented; Status Bar bottom, white Message Bar, one-row separator                                |
 | Terminal resize handling                                    | Not implemented                                                                                     |
 | Unicode-aware input and display-width mapping               | Not implemented                                                                                     |
-| Automated tests                                             | Eight CTest targets pass in Debug and warning-clean builds                                             |
+| Automated tests                                             | Eight CTest targets pass in Debug and warning-clean builds                                          |
 | Hardening and final integration                             | Pending                                                                                             |
 
 ## Current Milestone
@@ -179,7 +179,7 @@ The current implementation has the complete input pipeline, filename entry for u
 
 ## Next Milestone
 
-**Chapter 53 — Hardening.** Focus on invariants, boundary cases, failure paths, sanitizers, and broader regression tests. Home, End, Page Up, Page Down, document Delete, and Tab remain follow-up work for the earlier navigation/editing milestones.
+**Chapter 53**
 
 ## Current Limitations
 
@@ -202,7 +202,6 @@ The current implementation has the complete input pipeline, filename entry for u
 - [ ] Add visible success/failure feedback when the Message Bar is implemented.
 - [ ] Decide whether Save As belongs in the implementation scope; currently Ctrl-S is a no-op for an unnamed Document.
 - [x] Complete the current failure-path review; broader injected write/close failures remain part of later hardening.
-
 
 ### Section 51.4 — Event Loop Integration
 
@@ -240,7 +239,6 @@ The current implementation has the complete input pipeline, filename entry for u
 
 Next: Chapter 52.6 — integration review and key-binding boundary before filename-entry and Save As.
 
-
 ### Chapter 52.7 — Filename Entry and Save As
 
 - [x] Added `EDITOR_COMMAND_CANCEL` and `INPUT_EVENT_ESCAPE`; standalone Escape is emitted when the Input Handler timeout expires while the parser is in the Escape state.
@@ -255,8 +253,7 @@ Next: Chapter 52.6 — integration review and key-binding boundary before filena
 - [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight tests pass.
 - [x] Pseudo-terminal integration checks verify Save As persistence and Escape cancellation.
 
-Current next milestone: Chapter 53 — Hardening. The user explicitly deferred a separate Save As command. Home, End, Page Up, Page Down, document Delete, and Tab remain follow-up work for the earlier navigation/editing milestones.
-
+Current next milestone: Chapter 53.
 
 ### Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation
 
@@ -272,4 +269,4 @@ Current next milestone: Chapter 53 — Hardening. The user explicitly deferred a
 - [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight tests pass.
 - [x] Pseudo-terminal checks pass for filename editing/saving, Message Bar styling, and dirty-quit workflows.
 
-Next: Chapter 53 — Hardening. Document navigation keys and Tab remain deferred to their earlier implementation milestones. No separate Save As command is planned for the current baseline.
+Next: Chapter 53.

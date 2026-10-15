@@ -7,6 +7,15 @@
 #define INITIAL_LINE_CAPACITY 16
 #define INITIAL_DOCUMENT_CAPACITY 8
 
+/*
+ * Allocate a single line's storage and mark it empty.
+ *
+ * Parameters:
+ *   line - the line to initialize; must not be NULL.
+ *
+ * Returns:
+ *   true on success, false if `line` is NULL or allocation failed.
+ */
 static bool document_line_init(DocumentLine *line)
 {
     if (line == NULL)
@@ -26,6 +35,15 @@ static bool document_line_init(DocumentLine *line)
     return true;
 }
 
+/*
+ * Release a single line's storage and reset it to an empty state.
+ *
+ * Parameters:
+ *   line - the line to release; may be NULL.
+ *
+ * Returns:
+ *   void.
+ */
 static void document_line_destroy(DocumentLine *line)
 {
     if (line == NULL)
@@ -39,6 +57,18 @@ static void document_line_destroy(DocumentLine *line)
     line->capacity = 0;
 }
 
+/*
+ * Double a line's capacity (or give it its initial capacity).
+ *
+ * On failure the line is left unchanged.
+ *
+ * Parameters:
+ *   line - the line whose storage should grow; must not be NULL.
+ *
+ * Returns:
+ *   true on success, false if `line` is NULL, the capacity would overflow,
+ *   or the reallocation failed.
+ */
 static bool document_grow_line(DocumentLine *line)
 {
     size_t new_capacity;
@@ -81,6 +111,18 @@ static bool document_grow_line(DocumentLine *line)
     return true;
 }
 
+/*
+ * Double the line array's capacity (or give it its initial capacity).
+ *
+ * On failure the document is left unchanged.
+ *
+ * Parameters:
+ *   document - the document whose line array should grow; must not be NULL.
+ *
+ * Returns:
+ *   true on success, false if `document` is NULL, the capacity would
+ *   overflow, or the reallocation failed.
+ */
 static bool document_grow_lines(Document *document)
 {
     size_t new_capacity;
@@ -123,6 +165,15 @@ static bool document_grow_lines(Document *document)
     return true;
 }
 
+/*
+ * Initialize a Document containing one empty logical line.
+ *
+ * Parameters:
+ *   document - the document to initialize; must not be NULL.
+ *
+ * Returns:
+ *   true on success, false if `document` is NULL or allocation failed.
+ */
 bool document_init(Document *document)
 {
     if (document == NULL)
@@ -152,6 +203,15 @@ bool document_init(Document *document)
     return true;
 }
 
+/*
+ * Release all storage owned by a Document and reset it to a zero-line state.
+ *
+ * Parameters:
+ *   document - the document to release; may be NULL.
+ *
+ * Returns:
+ *   void.
+ */
 void document_destroy(Document *document)
 {
     if (document == NULL)
@@ -171,6 +231,20 @@ void document_destroy(Document *document)
     document->line_capacity = 0;
 }
 
+/*
+ * Return the line at zero-based `row`.
+ *
+ * The pointer is valid only until the document's line array is next grown or
+ * modified.
+ *
+ * Parameters:
+ *   document - the document to read from.
+ *   row      - the zero-based line index.
+ *
+ * Returns:
+ *   a pointer to the requested line, or NULL if `document` is NULL or `row`
+ *   is out of range.
+ */
 DocumentLine *document_get_line(Document *document, size_t row)
 {
     if (document == NULL || row >= document->line_count)
@@ -181,6 +255,21 @@ DocumentLine *document_get_line(Document *document, size_t row)
     return &document->lines[row];
 }
 
+/*
+ * Insert one Unicode code point at (row, column), shifting the rest of the
+ * line one position to the right.
+ *
+ * Parameters:
+ *   document   - the document to modify.
+ *   row        - the zero-based line to insert into.
+ *   column     - the zero-based insertion position (0 to line length).
+ *   code_point - the Unicode scalar to insert; surrogates and values above
+ *                U+10FFFF are rejected.
+ *
+ * Returns:
+ *   true if the character was inserted, false on NULL arguments, invalid
+ *   positions, an invalid code point, or allocation failure.
+ */
 bool document_insert_character(Document *document, size_t row, size_t column, uint32_t code_point)
 {
     DocumentLine *line;
@@ -257,6 +346,19 @@ bool document_insert_character(Document *document, size_t row, size_t column, ui
     return true;
 }
 
+/*
+ * Delete the code point at (row, column), shifting the rest of the line one
+ * position to the left.
+ *
+ * Parameters:
+ *   document - the document to modify.
+ *   row      - the zero-based line to delete from.
+ *   column   - the zero-based position of the code point to delete.
+ *
+ * Returns:
+ *   true if a code point was removed, false if `document` is NULL or the
+ *   position is invalid (column past the end of the line).
+ */
 bool document_delete_character(Document *document, size_t row, size_t column)
 {
     DocumentLine *line = document_get_line(document, row);
@@ -273,6 +375,20 @@ bool document_delete_character(Document *document, size_t row, size_t column)
     return true;
 }
 
+/*
+ * Split a line at (row, column): the suffix starting at `column` moves into
+ * a new line inserted directly below, and the original line keeps only its
+ * prefix.
+ *
+ * Parameters:
+ *   document - the document to modify.
+ *   row      - the zero-based line to split.
+ *   column   - the zero-based split position (0 to line length).
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, invalid positions, or
+ *   allocation failure. On failure the document is left unchanged.
+ */
 bool document_split_line(Document *document, size_t row, size_t column)
 {
     DocumentLine *line;
@@ -379,6 +495,19 @@ bool document_split_line(Document *document, size_t row, size_t column)
     return true;
 }
 
+/*
+ * Merge the line at `row` with the line immediately below it: the lower
+ * line's contents are appended to the upper line and the lower line is
+ * removed.
+ *
+ * Parameters:
+ *   document - the document to modify.
+ *   row      - the zero-based index of the upper line.
+ *
+ * Returns:
+ *   true on success, false if `document` is NULL, `row` is the last line, or
+ *   allocation failed.
+ */
 bool document_merge_lines(Document *document, size_t row)
 {
     DocumentLine *first_line;

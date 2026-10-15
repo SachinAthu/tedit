@@ -2,6 +2,16 @@
 
 #include <stddef.h>
 
+/*
+ * This file turns raw terminal bytes into InputEvents.
+ *
+ * A parser is a small state machine because many keystrokes arrive as
+ * multi-byte sequences: an Up arrow is ESC '[' 'A', Delete is ESC '[' '3'
+ * '~', and non-ASCII characters arrive as UTF-8 byte runs. The parser
+ * remembers where it is inside such a sequence between input_parser_feed()
+ * calls and emits an event only when a complete key has been recognized.
+ */
+
 #define INPUT_CONTROL_Q 0x11
 #define INPUT_CONTROL_S 0x13
 #define INPUT_BACKSPACE 0x7F
@@ -15,6 +25,15 @@
 #define UTF8_THREE_BYTE_PREFIX 0xE0
 #define UTF8_FOUR_BYTE_PREFIX 0xF0
 
+/*
+ * Reset a parser to the NORMAL state so it is ready for a new key sequence.
+ *
+ * Parameters:
+ *   parser - the parser to initialize; may be NULL.
+ *
+ * Returns:
+ *   void.
+ */
 void input_parser_init(InputParser *parser)
 {
     if (parser == NULL)
@@ -29,12 +48,37 @@ void input_parser_init(InputParser *parser)
     parser->csi_parameter = 0;
 }
 
+/*
+ * Mark an event as "no key recognized yet".
+ *
+ * Parameters:
+ *   event - the event to clear; must not be NULL.
+ *
+ * Returns:
+ *   void.
+ */
 static void input_event_clear(InputEvent *event)
 {
     event->type = INPUT_EVENT_NONE;
     event->character = 0;
 }
 
+/*
+ * Handle one byte of a UTF-8 character being assembled.
+ *
+ * When a continuation byte completes the code point, the accumulated scalar
+ * is validated (range, surrogate exclusion, and the `utf8_minimum` check
+ * that rejects overlong encodings) and emitted as an INPUT_EVENT_CHARACTER.
+ *
+ * Parameters:
+ *   parser - the parser holding the partial UTF-8 state.
+ *   byte   - the next raw byte.
+ *   event  - out-parameter: receives the completed character event when the
+ *            code point finishes.
+ *
+ * Returns:
+ *   always true (all input is consumed by this handler).
+ */
 static bool input_parser_feed_utf8(InputParser *parser, unsigned char byte, InputEvent *event)
 {
     if (parser->utf8_remaining > 0)
@@ -91,6 +135,22 @@ static bool input_parser_feed_utf8(InputParser *parser, unsigned char byte, Inpu
     return true;
 }
 
+/*
+ * Feed one raw byte into the parser.
+ *
+ * The byte is accumulated into the current key sequence; `event` receives a
+ * new event only when the byte completes one. For bytes that merely continue
+ * a sequence, `event` is set to INPUT_EVENT_NONE.
+ *
+ * Parameters:
+ *   parser - the parser to feed; must not be NULL.
+ *   byte   - the next byte read from the terminal.
+ *   event  - out-parameter: receives the recognized key event (or
+ *            INPUT_EVENT_NONE); must not be NULL.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments.
+ */
 bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *event)
 {
     if (parser == NULL || event == NULL)
@@ -210,6 +270,22 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
     return true;
 }
 
+/*
+ * Abort any half-finished sequence and reset the parser to NORMAL.
+ *
+ * Called when no further bytes arrived in time. If the parser was waiting
+ * for the rest of an escape sequence that began with a lone ESC, the timeout
+ * turns that ESC into an INPUT_EVENT_ESCAPE; otherwise the event is
+ * INPUT_EVENT_NONE.
+ *
+ * Parameters:
+ *   parser - the parser to reset; must not be NULL.
+ *   event  - out-parameter: receives the synthesized event; must not be
+ *            NULL.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments.
+ */
 bool input_parser_timeout(InputParser *parser, InputEvent *event)
 {
     if (parser == NULL || event == NULL)
@@ -232,6 +308,18 @@ bool input_parser_timeout(InputParser *parser, InputEvent *event)
     return true;
 }
 
+/*
+ * Report whether the parser is in the middle of an escape sequence.
+ *
+ * The event loop uses this to decide whether the next byte must be read
+ * with a timeout (see read_escape_byte() in main.c).
+ *
+ * Parameters:
+ *   parser - the parser to inspect; may be NULL.
+ *
+ * Returns:
+ *   true if `parser` is not NULL and its state is not NORMAL.
+ */
 bool input_parser_is_waiting(const InputParser *parser)
 {
     return parser != NULL && parser->state != INPUT_PARSER_NORMAL;

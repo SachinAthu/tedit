@@ -6,6 +6,33 @@
 
 #include <string.h>
 
+/*
+ * This file is the "brain" of the editor: it turns commands into concrete
+ * changes to the editor state. All document edits, cursor moves, saves, and
+ * the quit flow run through command_engine_execute().
+ *
+ * Two small "modes" are handled here as well: filename entry (open after
+ * Ctrl-S on an unnamed document) and the quit confirmation (open after
+ * Ctrl-Q on a dirty document). While a mode is active, commands are routed
+ * to that mode's handler instead of the normal command switch.
+ */
+
+/*
+ * Perform a Backspace edit in the document.
+ *
+ * Deletes the code point before the cursor, or - when the cursor is at the
+ * start of a line that has one above it - merges the two lines and leaves
+ * the cursor at the join point.
+ *
+ * Parameters:
+ *   state   - the editor state to modify.
+ *   changed - out-parameter: set to true when the document changed.
+ *
+ * Returns:
+ *   true when the command was handled (including "nothing to delete" and
+ *   "deletion failed", which simply leave the document alone), false on an
+ *   internal cursor-update failure.
+ */
 static bool command_backspace(EditorState *state, bool *changed)
 {
     if (state->cursor.column > 0)
@@ -51,6 +78,16 @@ static bool command_backspace(EditorState *state, bool *changed)
     return true;
 }
 
+/*
+ * Encode one Unicode scalar as UTF-8.
+ *
+ * Parameters:
+ *   character - the scalar to encode.
+ *   bytes     - out-parameter: receives the encoded bytes (1..4).
+ *
+ * Returns:
+ *   the number of bytes written, or 0 if `character` is not a valid scalar.
+ */
 static size_t encode_utf8(uint32_t character, unsigned char bytes[4])
 {
     if (character <= 0x7F)
@@ -82,6 +119,21 @@ static size_t encode_utf8(uint32_t character, unsigned char bytes[4])
     return 0;
 }
 
+/*
+ * Return the byte index at the start of the UTF-8 code point just before
+ * `position` in `text`.
+ *
+ * Used to move the filename-entry cursor left by one character rather than
+ * by one byte.
+ *
+ * Parameters:
+ *   text     - the UTF-8 string to walk.
+ *   position - the current cursor byte index.
+ *
+ * Returns:
+ *   the byte index of the previous code point, or 0 when already at the
+ *   start.
+ */
 static size_t filename_previous_boundary(const char *text, size_t position)
 {
     if (position == 0)
@@ -97,6 +149,22 @@ static size_t filename_previous_boundary(const char *text, size_t position)
     return position;
 }
 
+/*
+ * Return the byte index at the start of the UTF-8 code point just after
+ * `position` in `text`.
+ *
+ * Used to move the filename-entry cursor right by one character rather than
+ * by one byte.
+ *
+ * Parameters:
+ *   text     - the UTF-8 string to walk.
+ *   length   - the number of bytes in use in `text`.
+ *   position - the current cursor byte index.
+ *
+ * Returns:
+ *   the byte index of the next code point, or `length` when already at the
+ *   end.
+ */
 static size_t filename_next_boundary(const char *text, size_t length, size_t position)
 {
     if (position >= length)
@@ -112,6 +180,15 @@ static size_t filename_next_boundary(const char *text, size_t length, size_t pos
     return position;
 }
 
+/*
+ * Close the filename-entry prompt, discarding what was typed.
+ *
+ * Parameters:
+ *   state - the editor state to update.
+ *
+ * Returns:
+ *   void.
+ */
 static void filename_entry_clear(EditorState *state)
 {
     state->filename_entry_active = false;
@@ -120,6 +197,17 @@ static void filename_entry_clear(EditorState *state)
     state->filename_entry[0] = '\0';
 }
 
+/*
+ * Open the filename-entry prompt with an empty entry.
+ *
+ * Parameters:
+ *   state          - the editor state to update.
+ *   quit_after_save - whether a successful save should also quit the editor
+ *                     (true when the prompt was opened from the quit flow).
+ *
+ * Returns:
+ *   void.
+ */
 static void filename_entry_start(EditorState *state, bool quit_after_save)
 {
     state->filename_entry_active = true;
@@ -130,6 +218,23 @@ static void filename_entry_start(EditorState *state, bool quit_after_save)
     (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
 }
 
+/*
+ * Perform a Ctrl-S save.
+ *
+ * A document with a known path is written back to it. An unnamed document
+ * has nowhere to go yet, so the filename-entry prompt is opened instead.
+ * When `quitting` is true and the save succeeds, the editor quits.
+ *
+ * Parameters:
+ *   state       - the editor state to read and update.
+ *   save_path   - fallback path from the command line; may be NULL.
+ *   quitting    - whether this save was triggered by the quit flow.
+ *   redraw      - out-parameter: set to true (the status message changed).
+ *   should_quit - out-parameter: set to true when the editor should exit.
+ *
+ * Returns:
+ *   always true.
+ */
 static bool command_save(EditorState *state, const char *save_path, bool quitting, bool *redraw, bool *should_quit)
 {
     const char *current_path = state->file_path != NULL ? state->file_path : save_path;
@@ -160,6 +265,25 @@ static bool command_save(EditorState *state, const char *save_path, bool quittin
     return true;
 }
 
+/*
+ * Route a command through the active filename-entry prompt.
+ *
+ * While the prompt is open, every keystroke edits the filename: printable
+ * characters are inserted at the cursor, arrows and Backspace/Delete edit
+ * the entry, Enter saves under the typed name (quitting as well when the
+ * prompt was opened from the quit flow), and Escape cancels. Anything else
+ * is ignored.
+ *
+ * Parameters:
+ *   state       - the editor state to update.
+ *   command     - the command to handle.
+ *   redraw      - out-parameter: set to true when the entry or message
+ *                 changed.
+ *   should_quit - out-parameter: set to true when a save-and-quit finishes.
+ *
+ * Returns:
+ *   always true.
+ */
 static bool filename_entry_execute(EditorState *state, const EditorCommand *command, bool *redraw, bool *should_quit)
 {
     if (command->type == EDITOR_COMMAND_CANCEL)
@@ -295,6 +419,23 @@ static bool filename_entry_execute(EditorState *state, const EditorCommand *comm
     return true;
 }
 
+/*
+ * Route a command through the active quit-confirmation prompt.
+ *
+ * The prompt answers Ctrl-Q on a dirty document: Y saves first (opening
+ * filename entry if the document is unnamed) and then quits, N discards the
+ * changes and quits, and Escape cancels. Other keys are ignored.
+ *
+ * Parameters:
+ *   state       - the editor state to update.
+ *   command     - the command to handle.
+ *   save_path   - fallback path from the command line; may be NULL.
+ *   redraw      - out-parameter: set to true when the prompt state changed.
+ *   should_quit - out-parameter: set to true when the editor should exit.
+ *
+ * Returns:
+ *   always true.
+ */
 static bool quit_confirmation_execute(EditorState *state, const EditorCommand *command, const char *save_path, bool *redraw, bool *should_quit)
 {
     if (command->type == EDITOR_COMMAND_CANCEL)
@@ -327,6 +468,29 @@ static bool quit_confirmation_execute(EditorState *state, const EditorCommand *c
     return true;
 }
 
+/*
+ * Execute one command against the editor state.
+ *
+ * The command may edit the document, move the cursor, save the file, open
+ * the filename-entry prompt, or start/answer the quit confirmation. The
+ * caller uses the out-parameters to decide whether to redraw and whether to
+ * leave the event loop.
+ *
+ * Parameters:
+ *   state       - the editor state to modify; must not be NULL.
+ *   command     - the command to execute; must not be NULL.
+ *   save_path   - path passed on the command line, used as the save target
+ *                 when the document has no file path of its own yet; may be
+ *                 NULL.
+ *   redraw      - out-parameter: set to true when the screen should be
+ *                 redrawn; must not be NULL.
+ *   should_quit - out-parameter: set to true when the editor should exit;
+ *                 must not be NULL.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments. On success `redraw` and
+ *   `should_quit` are always written (false when the command did nothing).
+ */
 bool command_engine_execute(EditorState *state, const EditorCommand *command, const char *save_path, bool *redraw, bool *should_quit)
 {
     bool changed = false;
@@ -413,7 +577,8 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
         changed = cursor_move_down(&state->cursor, &state->document);
         break;
     case EDITOR_COMMAND_DELETE_CHARACTER:
-        /* Document Delete is a navigation/editing milestone; ignore it here. */
+        /* Delete currently edits only the filename-entry prompt; deleting
+         * inside the document itself is deferred, so nothing happens here. */
         break;
     default:
         return false;

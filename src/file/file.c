@@ -394,6 +394,14 @@ static FileLoadResult file_decode_document(const FileByteBuffer *bytes, Document
  *   2. Decode those bytes into a temporary Document.
  *   3. Only on success, destroy the caller's document and move the temporary
  *      document's contents into it.
+ *
+ * Parameters:
+ *   path         - path of the file to read; must not be NULL or empty.
+ *   out_document - the Document that receives the decoded contents; must
+ *                  not be NULL.
+ *
+ * Returns:
+ *   a FileLoadResult describing the outcome.
  */
 FileLoadResult file_load_document(const char *path, Document *out_document)
 {

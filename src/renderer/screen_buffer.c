@@ -81,6 +81,19 @@ void screen_buffer_destroy(ScreenBuffer *buffer)
     buffer->columns = 0;
 }
 
+/*
+ * Overwrite every cell in the buffer with the given code point.
+ *
+ * Used at the start of each frame so characters left over from the previous
+ * frame do not show through.
+ *
+ * Parameters:
+ *   buffer     - the buffer to clear; may be NULL.
+ *   code_point - the value to write into every cell.
+ *
+ * Returns:
+ *   void.
+ */
 void screen_buffer_clear(ScreenBuffer *buffer, uint32_t code_point)
 {
     if (buffer == NULL || buffer->cells == NULL)
@@ -97,6 +110,19 @@ void screen_buffer_clear(ScreenBuffer *buffer, uint32_t code_point)
     }
 }
 
+/*
+ * Write one code point into the cell at (row, column).
+ *
+ * Parameters:
+ *   buffer     - the buffer to write into.
+ *   row        - the zero-based row to write.
+ *   column     - the zero-based column to write.
+ *   code_point - the value to store in the cell.
+ *
+ * Returns:
+ *   true on success, false if `buffer` is NULL/unallocated or the
+ *   coordinates are out of range.
+ */
 bool screen_buffer_set(ScreenBuffer *buffer, size_t row, size_t column, uint32_t code_point)
 {
     size_t index;

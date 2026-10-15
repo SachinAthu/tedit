@@ -2,6 +2,7 @@
 #define TERMINAL_TERMINAL_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <termios.h>
 
 /*
@@ -14,6 +15,9 @@
  *   - raw_mode_enabled:      true while "raw mode" is active.
  *   - alternate_screen_enabled: true while the alternate screen is active.
  *   - autowrap_disabled:     true while line auto-wrapping has been turned off.
+ *   - rows:                  the terminal height in text rows (owned by the
+ *                            Terminal Interface; populated by terminal_init).
+ *   - columns:               the terminal width in text columns (same owner).
  */
 typedef struct
 {
@@ -22,17 +26,24 @@ typedef struct
     bool raw_mode_enabled;
     bool alternate_screen_enabled;
     bool autowrap_disabled;
+    size_t rows;
+    size_t columns;
 } TerminalState;
 
 /*
- * Prepare the terminal for use, saving its current settings.
+ * Prepare the terminal for use, saving its current settings and querying its
+ * dimensions.
+ *
+ * On success the terminal's text size is stored in `terminal->rows` and
+ * `terminal->columns`.
  *
  * Parameters:
  *   terminal - the state to initialize; must not be NULL.
  *
  * Returns:
- *   true on success, false if `terminal` is NULL or the settings could not be
- *   read.
+ *   true on success, false if `terminal` is NULL, the settings could not be
+ *   read, or the terminal dimensions could not be determined (e.g. when
+ *   standard output is not a real terminal).
  */
 bool terminal_init(TerminalState *terminal);
 

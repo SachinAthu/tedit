@@ -268,7 +268,23 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
            renderer_draw_message_bar(renderer, state);
 }
 
-/* Draw filename, modified state, and one-based cursor position in the Status Bar row. */
+/*
+ * Draw the Status Bar: the bottom screen row with the file name, a "[+]"
+ * marker when the document is dirty, and the one-based cursor position on
+ * the right.
+ *
+ * The left side is clipped to whatever width the right side leaves free.
+ * File-path bytes are written as-is when printable ASCII; any other byte is
+ * shown as '?' so arbitrary filesystem names cannot produce control codes.
+ *
+ * Parameters:
+ *   renderer - the renderer whose buffer receives the row.
+ *   state    - the editor state to read; not modified.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, a degenerate buffer, or a
+ *   failed cell write.
+ */
 static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *state)
 {
     char right[96];
@@ -352,6 +368,20 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
     return true;
 }
 
+/*
+ * Pick the prompt text shown while the filename-entry prompt is active.
+ *
+ * The prompt adapts to the current message so that errors ("Save failed",
+ * "Filename is too long", ...) stay visible on the same row instead of being
+ * overwritten by a generic prompt.
+ *
+ * Parameters:
+ *   state - the editor state to inspect; may be NULL (falls back to the
+ *           default prompt).
+ *
+ * Returns:
+ *   a pointer to the prompt string (never NULL).
+ */
 static const char *renderer_filename_prompt_prefix(const EditorState *state)
 {
     if (state == NULL)
@@ -373,7 +403,22 @@ static const char *renderer_filename_prompt_prefix(const EditorState *state)
     return "Save as: ";
 }
 
-/* Draw the Message Bar on the row above the bottom Status Bar. */
+/*
+ * Draw the Message Bar: the second row from the bottom.
+ *
+ * While the filename prompt is active, the row shows the prompt followed by
+ * the text entered so far. Otherwise it shows the current status message.
+ * Non-ASCII bytes are rendered as '?' for the same reason as in the Status
+ * Bar.
+ *
+ * Parameters:
+ *   renderer - the renderer whose buffer receives the row.
+ *   state    - the editor state to read; not modified.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, a degenerate buffer, or a
+ *   failed cell write.
+ */
 static bool renderer_draw_message_bar(Renderer *renderer, const EditorState *state)
 {
     const char *prompt;
@@ -727,8 +772,14 @@ static bool renderer_write_cursor_position(size_t row, size_t column)
 }
 
 /*
- * Return the number of bytes required to encode a Unicode scalar value
- * as UTF-8. Invalid scalar values are rejected.
+ * Return the number of bytes needed to encode a Unicode scalar as UTF-8.
+ *
+ * Parameters:
+ *   code_point - the scalar to measure.
+ *
+ * Returns:
+ *   1..4 for a valid scalar, or 0 for UTF-16 surrogates and values above
+ *   U+10FFFF.
  */
 static size_t renderer_utf8_length(uint32_t code_point)
 {
@@ -761,8 +812,15 @@ static size_t renderer_utf8_length(uint32_t code_point)
 }
 
 /*
- * Encode one Unicode scalar value into a four-byte output array.
- * The returned length is zero if the value is invalid.
+ * Encode one Unicode scalar into UTF-8 in the given four-byte array.
+ *
+ * Parameters:
+ *   code_point - the scalar to encode.
+ *   output     - where to write the encoded bytes (1..4 of them).
+ *
+ * Returns:
+ *   the number of bytes written, or 0 if `code_point` is not a valid scalar
+ *   or `output` is NULL.
  */
 static size_t renderer_encode_utf8(uint32_t code_point, char output[4])
 {

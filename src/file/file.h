@@ -3,6 +3,14 @@
 
 #include "document/document.h"
 
+/*
+ * Outcome of file_load_document().
+ *
+ * FILE_LOAD_OK means the document was replaced with the decoded file
+ * contents. Every other value reports why loading failed, so callers can
+ * produce a useful message; the destination document is left untouched on
+ * all failures.
+ */
 typedef enum
 {
     FILE_LOAD_OK,
@@ -13,6 +21,14 @@ typedef enum
     FILE_LOAD_OUT_OF_MEMORY
 } FileLoadResult;
 
+/*
+ * Outcome of file_save_document().
+ *
+ * FILE_SAVE_OK means the destination file was replaced with the serialized
+ * document. Every other value reports which step failed; on all failures the
+ * destination file keeps its previous contents (when a replacement is even
+ * reached) and the caller's Document is unchanged.
+ */
 typedef enum
 {
     FILE_SAVE_OK,
@@ -29,12 +45,19 @@ typedef enum
  * Load a UTF-8 file into a Document.
  *
  * On success, replace the contents of the output Document with the
- * decoded file contents. Recognize LF and CRLF line endings.
+ * decoded file contents. Recognize LF and CRLF line endings. An empty
+ * file produces a zero-line Document.
  *
  * On failure, leave the caller's existing Document unchanged.
  *
- * The caller owns the resulting Document and must eventually
- * release it with document_destroy().
+ * Parameters:
+ *   path         - path of the file to read; must not be NULL or empty.
+ *   out_document - the Document that receives the decoded contents; must
+ *                  not be NULL.
+ *
+ * Returns:
+ *   a FileLoadResult describing the outcome. The caller owns the resulting
+ *   Document and must eventually release it with document_destroy().
  */
 FileLoadResult file_load_document(const char *path, Document *out_document);
 
@@ -46,8 +69,14 @@ FileLoadResult file_load_document(const char *path, Document *out_document);
  * The destination is replaced atomically after the temporary file
  * has been written and closed successfully.
  *
- * The caller retains ownership of the Document. Editor State and
- * its Dirty Flag are not modified by this function.
+ * Parameters:
+ *   path     - destination path; must not be NULL or empty.
+ *   document - the Document to serialize; must not be NULL.
+ *
+ * Returns:
+ *   a FileSaveResult describing the outcome. The caller retains ownership
+ *   of the Document; the Editor State's Dirty Flag is not modified by this
+ *   function.
  */
 FileSaveResult file_save_document(const char *path, const Document *document);
 

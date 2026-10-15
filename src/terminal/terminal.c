@@ -2,6 +2,7 @@
 
 #include <errno.h> /* Gives us errno and EINTR, so we can retry interrupted writes. */
 #include <string.h> /* Gives us memset(), used to zero out the struct. */
+#include <sys/ioctl.h> /* Gives us ioctl() and TIOCGWINSZ, used to ask the terminal its size. */
 #include <unistd.h> /* Gives us write() and STDIN_FILENO, the number that names the keyboard input stream. */
 
 /*
@@ -69,10 +70,13 @@ static bool terminal_write_all(const char *data, size_t length)
  *
  * Returns:
  *   bool: true  -> settings were read and the terminal is ready to use.
- *         false -> terminal was NULL, or the settings could not be read.
+ *         false -> terminal was NULL, or the settings or dimensions could
+ *                  not be read.
  */
 bool terminal_init(TerminalState *terminal)
 {
+    struct winsize window_size;
+
     /* A *pointer can be NULL (point to nothing). Writing through a NULL
      * pointer would crash, so we check for it first. */
     if (terminal == NULL)
@@ -95,6 +99,18 @@ bool terminal_init(TerminalState *terminal)
     {
         return false;
     }
+
+    /* Ask the OS how big the terminal window is (in text rows and columns).
+     * TIOCGWINSZ = "terminal I/O control get window size". A real terminal
+     * answers; a pipe or file reports zeroes, which we reject as unusable. */
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &window_size) == -1 ||
+        window_size.ws_row == 0 || window_size.ws_col == 0)
+    {
+        return false;
+    }
+
+    terminal->rows = window_size.ws_row;
+    terminal->columns = window_size.ws_col;
 
     /* Remember that init succeeded, so later functions are allowed to run. */
     terminal->initialized = true;

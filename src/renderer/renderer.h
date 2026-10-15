@@ -26,10 +26,51 @@ typedef struct
     size_t output_capacity;
 } Renderer;
 
+/*
+ * Initialize a Renderer for a screen of the given size.
+ *
+ * The bottom three rows are reserved for the interface (separator, Message
+ * Bar, Status Bar), so `document_rows` is three less than `rows`.
+ *
+ * Parameters:
+ *   renderer - the renderer to initialize; must not be NULL.
+ *   rows     - total screen height; must be at least 4.
+ *   columns  - screen width; must be greater than 0.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, invalid sizes, or if the
+ *   screen buffer could not be allocated.
+ */
 bool renderer_init(Renderer *renderer, size_t rows, size_t columns);
 
+/*
+ * Release everything the renderer allocated.
+ *
+ * Parameters:
+ *   renderer - the renderer to clean up; may be NULL.
+ *
+ * Returns:
+ *   void.
+ */
 void renderer_destroy(Renderer *renderer);
 
+/*
+ * Draw one complete frame of the editor from the given state.
+ *
+ * The frame is built into the off-screen buffer, written to the terminal,
+ * and finished by placing the visible cursor at the editor's cursor
+ * position (or at the filename-entry cursor while that prompt is active).
+ * The editor state is read but never modified.
+ *
+ * Parameters:
+ *   renderer - the renderer that owns the off-screen buffer; must not be
+ *              NULL.
+ *   state    - the editor state to draw; must not be NULL.
+ *
+ * Returns:
+ *   true if the frame was written, false on NULL arguments, an invalid
+ *   state/buffer combination, or any write failure.
+ */
 bool renderer_render(Renderer *renderer, const EditorState *state);
 
 #endif

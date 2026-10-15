@@ -349,7 +349,7 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 
 ## Next Step
 
-**Chapter 53 — Hardening.** Begin invariant checks, boundary/failure-path review, sanitizer builds, and broader regression coverage. Navigation additions and Tab support remain tracked as follow-up work for their earlier implementation milestones.
+**Chapter 53**
 
 ## Chapter 51 Progress — Saving Through Editor State (Sections 51.2–51.3)
 
@@ -359,13 +359,11 @@ The File Manager serializes a complete Document as UTF-8 and writes canonical LF
 
 Verification for this snapshot: CMake build succeeded and all four registered CTest targets (`smoke`, `editing`, `file`, and `file_save`) passed. The save tests cover UTF-8 output, LF after each logical line, zero-line output, successful Dirty Flag clearing, and failure preservation of the Document, Dirty Flag, and existing destination contents.
 
-
 ## Chapter 51 Progress — Event Loop Integration (Section 51.4)
 
 The existing direct input loop now recognizes Ctrl-S (`0x13`). When the application was started with a filename, Ctrl-S calls `editor_state_save_file()` for that path. A failed save does not clear the Dirty Flag and does not terminate the Event Loop. Ctrl-S on an unnamed Document is currently a no-op; Save As is not implemented. Visible save feedback is deferred until the Message Bar exists, rather than adding a second terminal-output path in `main.c`.
 
 Verification: CMake configure/build succeeded; all four CTest targets passed. A pseudo-terminal integration check launched the editor with a file, inserted a character, sent Ctrl-S and Ctrl-Q, and confirmed the destination contained the updated text.
-
 
 ### Chapter 51 Progress — Failure-Path Review (Section 51.5)
 
@@ -377,7 +375,6 @@ Verification: CMake configure/build succeeded and all four CTest targets (`smoke
 
 The Input Engine and Command Engine are now implemented as separate modules. The Input Engine maps parser events to command values. The Command Engine executes insert, Backspace, newline, cursor movement, save, and quit commands, and reports redraw/quit decisions to the Event Loop. `main.c` retains the POSIX Input Handler and coordinates the full pipeline. All seven CTest targets pass in both Debug and warning-clean builds; a pseudo-terminal integration check passed for editing, Ctrl-S, and Ctrl-Q. Save As and filename-entry remain unimplemented. Next: Chapter 52.6 integration review and key-binding boundary.
 
-
 ## Chapter 52.7 — Filename Entry and Save As
 
 Ctrl-S saves to the current associated path. When no path is associated, it activates a bounded filename-entry mode. Printable input is encoded as UTF-8, Backspace removes the preceding code point, Enter attempts the safe save, and Escape cancels after the Input Handler timeout. The Renderer displays the `Save as:` prompt in the Status Bar and places the terminal cursor at the entry point.
@@ -385,7 +382,6 @@ Ctrl-S saves to the current associated path. When no path is associated, it acti
 `editor_state_save_as()` allocates the candidate path before writing and updates `file_path` plus the Dirty Flag only after successful save. Failure keeps the prompt active for correction or cancellation; cancellation and failure preserve the previous association, Document, and Dirty Flag.
 
 All eight CTest targets pass in Debug and warning-clean builds. Pseudo-terminal checks verified Save As persistence and Escape cancellation.
-
 
 ## Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation
 
