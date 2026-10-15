@@ -4,6 +4,8 @@
 #include "document/document.h"
 #include "state/editor_state.h"
 
+#include <string.h>
+
 static bool command_backspace(EditorState *state, bool *changed)
 {
     if (state->cursor.column > 0)
@@ -80,31 +82,154 @@ static size_t encode_utf8(uint32_t character, unsigned char bytes[4])
     return 0;
 }
 
-static bool filename_entry_execute(EditorState *state,
-                                   const EditorCommand *command,
-                                   bool *redraw)
+static size_t filename_previous_boundary(const char *text, size_t position)
+{
+    if (position == 0)
+    {
+        return 0;
+    }
+
+    --position;
+    while (position > 0 && (((unsigned char)text[position] & 0xC0) == 0x80))
+    {
+        --position;
+    }
+    return position;
+}
+
+static size_t filename_next_boundary(const char *text, size_t length, size_t position)
+{
+    if (position >= length)
+    {
+        return length;
+    }
+
+    ++position;
+    while (position < length && (((unsigned char)text[position] & 0xC0) == 0x80))
+    {
+        ++position;
+    }
+    return position;
+}
+
+static void filename_entry_clear(EditorState *state)
+{
+    state->filename_entry_active = false;
+    state->filename_entry_length = 0;
+    state->filename_entry_cursor = 0;
+    state->filename_entry[0] = '\0';
+}
+
+static void filename_entry_start(EditorState *state, bool quit_after_save)
+{
+    state->filename_entry_active = true;
+    state->filename_entry_length = 0;
+    state->filename_entry_cursor = 0;
+    state->filename_entry[0] = '\0';
+    state->quit_after_save = quit_after_save;
+    (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
+}
+
+static bool command_save(EditorState *state, const char *save_path, bool quitting, bool *redraw, bool *should_quit)
+{
+    const char *current_path = state->file_path != NULL ? state->file_path : save_path;
+
+    if (current_path == NULL)
+    {
+        filename_entry_start(state, quitting);
+        *redraw = true;
+        return true;
+    }
+
+    if (editor_state_save_file(state, current_path))
+    {
+        (void)editor_state_set_message(state, "Saved successfully.");
+        state->quit_after_save = false;
+        if (quitting)
+        {
+            *should_quit = true;
+        }
+    }
+    else
+    {
+        (void)editor_state_set_message(state, "Save failed; document remains modified.");
+        state->quit_after_save = false;
+    }
+
+    *redraw = true;
+    return true;
+}
+
+static bool filename_entry_execute(EditorState *state, const EditorCommand *command, bool *redraw, bool *should_quit)
 {
     if (command->type == EDITOR_COMMAND_CANCEL)
     {
-        state->filename_entry_active = false;
-        state->filename_entry_length = 0;
-        state->filename_entry[0] = '\0';
-        (void)editor_state_set_message(state, "Save As cancelled.");
+        const bool was_quitting = state->quit_after_save;
+        filename_entry_clear(state);
+        state->quit_after_save = false;
+        (void)editor_state_set_message(state, was_quitting ? "Quit cancelled." : "Save As cancelled.");
         *redraw = true;
+        return true;
+    }
+
+    if (command->type == EDITOR_COMMAND_MOVE_LEFT)
+    {
+        const size_t previous = filename_previous_boundary(state->filename_entry,
+                                                           state->filename_entry_cursor);
+        if (previous != state->filename_entry_cursor)
+        {
+            state->filename_entry_cursor = previous;
+            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
+            *redraw = true;
+        }
+        return true;
+    }
+
+    if (command->type == EDITOR_COMMAND_MOVE_RIGHT)
+    {
+        const size_t next = filename_next_boundary(state->filename_entry,
+                                                   state->filename_entry_length,
+                                                   state->filename_entry_cursor);
+        if (next != state->filename_entry_cursor)
+        {
+            state->filename_entry_cursor = next;
+            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
+            *redraw = true;
+        }
         return true;
     }
 
     if (command->type == EDITOR_COMMAND_BACKSPACE)
     {
-        if (state->filename_entry_length > 0)
+        if (state->filename_entry_cursor > 0)
         {
-            --state->filename_entry_length;
-            while (state->filename_entry_length > 0 &&
-                   (((unsigned char)state->filename_entry[state->filename_entry_length] & 0xC0) == 0x80))
-            {
-                --state->filename_entry_length;
-            }
-            state->filename_entry[state->filename_entry_length] = '\0';
+            const size_t previous = filename_previous_boundary(state->filename_entry,
+                                                               state->filename_entry_cursor);
+            const size_t removed = state->filename_entry_cursor - previous;
+            memmove(state->filename_entry + previous,
+                    state->filename_entry + state->filename_entry_cursor,
+                    state->filename_entry_length - state->filename_entry_cursor + 1);
+            state->filename_entry_length -= removed;
+            state->filename_entry_cursor = previous;
+            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
+            *redraw = true;
+        }
+        return true;
+    }
+
+    if (command->type == EDITOR_COMMAND_DELETE_CHARACTER)
+    {
+        if (state->filename_entry_cursor < state->filename_entry_length)
+        {
+            const size_t next = filename_next_boundary(state->filename_entry,
+                                                       state->filename_entry_length,
+                                                       state->filename_entry_cursor);
+            const size_t removed = next - state->filename_entry_cursor;
+            memmove(state->filename_entry + state->filename_entry_cursor,
+                    state->filename_entry + next,
+                    state->filename_entry_length - next + 1);
+            state->filename_entry_length -= removed;
+            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
             *redraw = true;
         }
         return true;
@@ -126,11 +251,13 @@ static bool filename_entry_execute(EditorState *state,
             return true;
         }
 
-        for (size_t index = 0; index < encoded_length; ++index)
-        {
-            state->filename_entry[state->filename_entry_length++] = (char)encoded[index];
-        }
-        state->filename_entry[state->filename_entry_length] = '\0';
+        memmove(state->filename_entry + state->filename_entry_cursor + encoded_length,
+                state->filename_entry + state->filename_entry_cursor,
+                state->filename_entry_length - state->filename_entry_cursor + 1);
+        memcpy(state->filename_entry + state->filename_entry_cursor, encoded, encoded_length);
+        state->filename_entry_length += encoded_length;
+        state->filename_entry_cursor += encoded_length;
+        (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
         *redraw = true;
         return true;
     }
@@ -146,10 +273,14 @@ static bool filename_entry_execute(EditorState *state,
 
         if (editor_state_save_as(state, state->filename_entry))
         {
-            state->filename_entry_active = false;
-            state->filename_entry_length = 0;
-            state->filename_entry[0] = '\0';
+            const bool should_quit_after_save = state->quit_after_save;
+            filename_entry_clear(state);
+            state->quit_after_save = false;
             (void)editor_state_set_message(state, "Saved successfully.");
+            if (should_quit_after_save)
+            {
+                *should_quit = true;
+            }
         }
         else
         {
@@ -160,15 +291,43 @@ static bool filename_entry_execute(EditorState *state,
         return true;
     }
 
-    /* Ignore navigation and other commands while filename entry is active. */
+    /* Ignore commands not meaningful while a filename is being entered. */
     return true;
 }
 
-bool command_engine_execute(EditorState *state,
-                            const EditorCommand *command,
-                            const char *save_path,
-                            bool *redraw,
-                            bool *should_quit)
+static bool quit_confirmation_execute(EditorState *state, const EditorCommand *command, const char *save_path, bool *redraw, bool *should_quit)
+{
+    if (command->type == EDITOR_COMMAND_CANCEL)
+    {
+        state->quit_confirmation_active = false;
+        (void)editor_state_set_message(state, "Quit cancelled.");
+        *redraw = true;
+        return true;
+    }
+
+    if (command->type != EDITOR_COMMAND_INSERT_CHARACTER)
+    {
+        return true;
+    }
+
+    if (command->character == 'n' || command->character == 'N')
+    {
+        state->quit_confirmation_active = false;
+        state->quit_after_save = false;
+        *should_quit = true;
+        return true;
+    }
+
+    if (command->character == 'y' || command->character == 'Y')
+    {
+        state->quit_confirmation_active = false;
+        return command_save(state, save_path, true, redraw, should_quit);
+    }
+
+    return true;
+}
+
+bool command_engine_execute(EditorState *state, const EditorCommand *command, const char *save_path, bool *redraw, bool *should_quit)
 {
     bool changed = false;
 
@@ -182,7 +341,12 @@ bool command_engine_execute(EditorState *state,
 
     if (state->filename_entry_active)
     {
-        return filename_entry_execute(state, command, redraw);
+        return filename_entry_execute(state, command, redraw, should_quit);
+    }
+
+    if (state->quit_confirmation_active)
+    {
+        return quit_confirmation_execute(state, command, save_path, redraw, should_quit);
     }
 
     switch (command->type)
@@ -190,35 +354,24 @@ bool command_engine_execute(EditorState *state,
     case EDITOR_COMMAND_NONE:
         break;
     case EDITOR_COMMAND_QUIT:
-        *should_quit = true;
-        break;
-    case EDITOR_COMMAND_SAVE:
-    {
-        const char *current_path = state->file_path != NULL ? state->file_path : save_path;
-
-        if (current_path == NULL)
+        if (state->is_dirty)
         {
-            state->filename_entry_active = true;
-            state->filename_entry_length = 0;
-            state->filename_entry[0] = '\0';
-            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
-        }
-        else if (editor_state_save_file(state, current_path))
-        {
-            (void)editor_state_set_message(state, "Saved successfully.");
+            state->quit_confirmation_active = true;
+            state->quit_after_save = false;
+            (void)editor_state_set_message(state, "Save changes before quitting? Y=save N=discard Esc=cancel");
+            *redraw = true;
         }
         else
         {
-            (void)editor_state_set_message(state, "Save failed; document remains modified.");
+            *should_quit = true;
         }
-        *redraw = true;
         break;
-    }
+    case EDITOR_COMMAND_SAVE:
+        return command_save(state, save_path, false, redraw, should_quit);
     case EDITOR_COMMAND_CANCEL:
         break;
     case EDITOR_COMMAND_INSERT_CHARACTER:
-        if (!document_insert_character(&state->document, state->cursor.row,
-                                       state->cursor.column, command->character))
+        if (!document_insert_character(&state->document, state->cursor.row, state->cursor.column, command->character))
         {
             return true;
         }
@@ -240,8 +393,7 @@ bool command_engine_execute(EditorState *state,
         {
             return true;
         }
-        if (!cursor_set_position(&state->cursor, &state->document,
-                                 state->cursor.row + 1, 0))
+        if (!cursor_set_position(&state->cursor, &state->document, state->cursor.row + 1, 0))
         {
             return false;
         }
@@ -259,6 +411,9 @@ bool command_engine_execute(EditorState *state,
         break;
     case EDITOR_COMMAND_MOVE_DOWN:
         changed = cursor_move_down(&state->cursor, &state->document);
+        break;
+    case EDITOR_COMMAND_DELETE_CHARACTER:
+        /* Document Delete is a navigation/editing milestone; ignore it here. */
         break;
     default:
         return false;

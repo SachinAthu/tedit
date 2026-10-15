@@ -22,6 +22,9 @@ typedef struct
     bool filename_entry_active;
     char filename_entry[EDITOR_FILENAME_CAPACITY];
     size_t filename_entry_length;
+    size_t filename_entry_cursor;
+    bool quit_confirmation_active;
+    bool quit_after_save;
 } EditorState;
 
 bool editor_state_init(EditorState *state);

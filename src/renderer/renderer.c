@@ -23,6 +23,7 @@
 static bool renderer_build_frame(Renderer *renderer, const EditorState *state);
 static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *state);
 static bool renderer_draw_message_bar(Renderer *renderer, const EditorState *state);
+static const char *renderer_filename_prompt_prefix(const EditorState *state);
 
 /* Send a finished ScreenBuffer to the terminal. */
 static bool renderer_write_frame(Renderer *renderer);
@@ -71,13 +72,12 @@ bool renderer_init(Renderer *renderer, size_t rows, size_t columns)
     renderer->output_buffer = NULL;
     renderer->output_capacity = 0;
 
-    if (rows < 3 || columns == 0 ||
-        !screen_buffer_init(&renderer->screen_buffer, rows, columns))
+    if (rows < 4 || columns == 0 || !screen_buffer_init(&renderer->screen_buffer, rows, columns))
     {
         return false;
     }
 
-    renderer->document_rows = rows - 2;
+    renderer->document_rows = rows - 3;
     return true;
 }
 
@@ -166,19 +166,22 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
     {
         if (state->filename_entry_active)
         {
-            const size_t prompt_length = sizeof("Save as: ") - 1;
-            size_t entry_column = prompt_length + state->filename_entry_length;
+            const size_t prompt_length = strlen(renderer_filename_prompt_prefix(state));
+            size_t entry_column = prompt_length + state->filename_entry_cursor;
             if (entry_column >= renderer->screen_buffer.columns)
             {
                 entry_column = renderer->screen_buffer.columns - 1;
             }
-            success = renderer_write_cursor_position(renderer->document_rows, entry_column);
+            success = renderer_write_all("\x1b[30;47m", 8) &&
+                      renderer_write_cursor_position(renderer->screen_buffer.rows - 2,
+                                                     entry_column);
         }
         else
         {
-            success = renderer_write_cursor_position(
-                state->cursor.row - state->viewport.viewport_row,
-                state->cursor.column - state->viewport.viewport_column);
+            success = renderer_write_all("\x1b[0m", 4) &&
+                      renderer_write_cursor_position(
+                          state->cursor.row - state->viewport.viewport_row,
+                          state->cursor.column - state->viewport.viewport_column);
         }
     }
 
@@ -261,7 +264,8 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
         }
     }
 
-    return renderer_draw_status_bar(renderer, state) && renderer_draw_message_bar(renderer, state);
+    return renderer_draw_status_bar(renderer, state) &&
+           renderer_draw_message_bar(renderer, state);
 }
 
 /* Draw filename, modified state, and one-based cursor position in the Status Bar row. */
@@ -288,13 +292,14 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
     path_length = strlen(path);
     suffix = state->is_dirty ? " [+]" : "";
     suffix_length = strlen(suffix);
-    right_length = snprintf(right, sizeof(right), "Ln %zu, Col %zu", state->cursor.row + 1, state->cursor.column + 1);
+    right_length = snprintf(right, sizeof(right), "Ln %zu, Col %zu",
+                            state->cursor.row + 1, state->cursor.column + 1);
     if (right_length < 0 || (size_t)right_length >= sizeof(right))
     {
         return false;
     }
 
-    status_row = renderer->document_rows;
+    status_row = renderer->screen_buffer.rows - 1;
     left_limit = renderer->screen_buffer.columns > (size_t)right_length + 2
                      ? renderer->screen_buffer.columns - (size_t)right_length - 2
                      : 0;
@@ -306,34 +311,6 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
         {
             return false;
         }
-    }
-
-    if (state->filename_entry_active)
-    {
-        static const char prompt[] = "Save as: ";
-        size_t column = 0;
-
-        while (column < sizeof(prompt) - 1 && column < renderer->screen_buffer.columns)
-        {
-            if (!screen_buffer_set(&renderer->screen_buffer, status_row, column, (uint32_t)(unsigned char)prompt[column]))
-            {
-                return false;
-            }
-            ++column;
-        }
-
-        for (size_t index = 0; index < state->filename_entry_length && column < renderer->screen_buffer.columns; ++index, ++column)
-        {
-            const unsigned char byte = (unsigned char)state->filename_entry[index];
-            const uint32_t code_point = byte >= 0x20 && byte < 0x7F
-                                            ? byte
-                                            : (byte >= 0x80 ? (uint32_t)'?' : (uint32_t)' ');
-            if (!screen_buffer_set(&renderer->screen_buffer, status_row, column, code_point))
-            {
-                return false;
-            }
-        }
-        return true;
     }
 
     /* Render a bounded path prefix; arbitrary filesystem bytes stay printable. */
@@ -375,37 +352,92 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
     return true;
 }
 
-/* Draw the current message on the final row, clipping it to screen width. */
+static const char *renderer_filename_prompt_prefix(const EditorState *state)
+{
+    if (state == NULL)
+    {
+        return "Save as: ";
+    }
+    if (strncmp(state->message, "Save failed", sizeof("Save failed") - 1) == 0)
+    {
+        return "Save failed: ";
+    }
+    if (strncmp(state->message, "Filename is too long", sizeof("Filename is too long") - 1) == 0)
+    {
+        return "Filename too long: ";
+    }
+    if (strncmp(state->message, "Enter a file name", sizeof("Enter a file name") - 1) == 0)
+    {
+        return "Enter a file name: ";
+    }
+    return "Save as: ";
+}
+
+/* Draw the Message Bar on the row above the bottom Status Bar. */
 static bool renderer_draw_message_bar(Renderer *renderer, const EditorState *state)
 {
+    const char *prompt;
+    size_t prompt_length;
     size_t message_row;
-    size_t message_length;
-    size_t visible_length;
+    size_t column = 0;
 
     if (renderer == NULL || state == NULL || renderer->screen_buffer.cells == NULL ||
-        renderer->screen_buffer.rows < 3)
+        renderer->screen_buffer.rows < 4)
     {
         return false;
     }
 
-    message_row = renderer->screen_buffer.rows - 1;
-    message_length = strlen(state->message);
-    visible_length = message_length < renderer->screen_buffer.columns
-                         ? message_length
-                         : renderer->screen_buffer.columns;
-
-    for (size_t column = 0; column < renderer->screen_buffer.columns; ++column)
+    message_row = renderer->screen_buffer.rows - 2;
+    prompt = renderer_filename_prompt_prefix(state);
+    prompt_length = strlen(prompt);
+    for (column = 0; column < renderer->screen_buffer.columns; ++column)
     {
-        uint32_t code_point = (uint32_t)' ';
-
-        if (column < visible_length)
+        if (!screen_buffer_set(&renderer->screen_buffer, message_row, column, (uint32_t)' '))
         {
-            unsigned char byte = (unsigned char)state->message[column];
-            code_point = byte >= 0x20 && byte < 0x7F
-                             ? (uint32_t)byte
-                             : (byte >= 0x80 ? (uint32_t)'?' : (uint32_t)' ');
+            return false;
+        }
+    }
+
+    if (state->filename_entry_active)
+    {
+        for (size_t index = 0; index < prompt_length &&
+                               index < renderer->screen_buffer.columns;
+             ++index)
+        {
+            if (!screen_buffer_set(&renderer->screen_buffer, message_row, index,
+                                   (uint32_t)(unsigned char)prompt[index]))
+            {
+                return false;
+            }
         }
 
+        column = prompt_length;
+        for (size_t index = 0; index < state->filename_entry_length &&
+                               column < renderer->screen_buffer.columns;
+             ++index, ++column)
+        {
+            const unsigned char byte = (unsigned char)state->filename_entry[index];
+            const uint32_t code_point = byte >= 0x20 && byte < 0x7F
+                                            ? byte
+                                            : (byte >= 0x80 ? (uint32_t)'?' : (uint32_t)' ');
+            if (!screen_buffer_set(&renderer->screen_buffer, message_row, column, code_point))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    const size_t message_length = strlen(state->message);
+    const size_t visible_length = message_length < renderer->screen_buffer.columns
+                                      ? message_length
+                                      : renderer->screen_buffer.columns;
+    for (column = 0; column < visible_length; ++column)
+    {
+        const unsigned char byte = (unsigned char)state->message[column];
+        const uint32_t code_point = byte >= 0x20 && byte < 0x7F
+                                        ? byte
+                                        : (byte >= 0x80 ? (uint32_t)'?' : (uint32_t)' ');
         if (!screen_buffer_set(&renderer->screen_buffer, message_row, column, code_point))
         {
             return false;
@@ -520,6 +552,15 @@ static bool renderer_write_frame(Renderer *renderer)
 
         frame_length += (size_t)sequence_length;
 
+        const size_t message_row = buffer->rows - 2;
+        const size_t style_length = row == message_row ? sizeof("\x1b[30;47m") - 1
+                                                       : sizeof("\x1b[0m") - 1;
+        if (frame_length > SIZE_MAX - style_length)
+        {
+            return false;
+        }
+        frame_length += style_length;
+
         for (size_t column = 0; column < buffer->columns; ++column)
         {
             const ScreenCell *cell = screen_buffer_get(buffer, row, column);
@@ -560,8 +601,20 @@ static bool renderer_write_frame(Renderer *renderer)
         }
 
         memcpy(renderer->output_buffer + position, sequence, (size_t)sequence_length);
-
         position += (size_t)sequence_length;
+
+        if (row == buffer->rows - 2)
+        {
+            static const char message_style[] = "\x1b[30;47m";
+            memcpy(renderer->output_buffer + position, message_style, sizeof(message_style) - 1);
+            position += sizeof(message_style) - 1;
+        }
+        else
+        {
+            static const char reset_style[] = "\x1b[0m";
+            memcpy(renderer->output_buffer + position, reset_style, sizeof(reset_style) - 1);
+            position += sizeof(reset_style) - 1;
+        }
 
         for (size_t column = 0; column < buffer->columns; ++column)
         {

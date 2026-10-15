@@ -376,7 +376,7 @@ static void test_renderer_uses_viewport_offsets(void)
     state.viewport.viewport_row = 1;
     state.viewport.viewport_column = 2;
 
-    assert(renderer_init(&renderer, 3, 3));
+    assert(renderer_init(&renderer, 4, 3));
     assert(pipe(output_pipe) == 0);
     saved_stdout = dup(STDOUT_FILENO);
     assert(saved_stdout >= 0);
@@ -404,6 +404,7 @@ static void test_renderer_uses_viewport_offsets(void)
     editor_state_destroy(&state);
 }
 
+
 /* The final row is the Status Bar and reports name, dirty state, and position. */
 static void test_renderer_draws_status_bar(void)
 {
@@ -413,7 +414,7 @@ static void test_renderer_draws_status_bar(void)
     size_t status_row;
 
     assert(editor_state_init(&state));
-    assert(renderer_init(&renderer, 4, 40));
+    assert(renderer_init(&renderer, 5, 40));
     state.file_path = malloc(sizeof("notes.txt"));
     assert(state.file_path != NULL);
     memcpy(state.file_path, "notes.txt", sizeof("notes.txt"));
@@ -435,7 +436,7 @@ static void test_renderer_draws_status_bar(void)
     close(saved_stdout);
     close(output_pipe[0]);
 
-    status_row = renderer.document_rows;
+    status_row = renderer.screen_buffer.rows - 1;
     cell = screen_buffer_get(&renderer.screen_buffer, status_row, 0);
     assert(cell != NULL && cell->code_point == 'n');
     cell = screen_buffer_get(&renderer.screen_buffer, status_row, 10);
@@ -462,12 +463,14 @@ static void test_renderer_draws_message_bar(void)
     EditorState state;
     Renderer renderer;
     const ScreenCell *cell;
+    char output[2048];
+    ssize_t output_length;
 
     assert(editor_state_init(&state));
     assert(renderer_init(&renderer, 4, 24));
     assert(editor_state_set_message(&state, "Saved successfully."));
 
-    /* The screen buffer is inspectable without requiring terminal output. */
+    /* Capture output to verify the Message Bar style without terminal output. */
     int output_pipe[2];
     int saved_stdout;
     assert(pipe(output_pipe) == 0);
@@ -478,12 +481,25 @@ static void test_renderer_draws_message_bar(void)
     assert(renderer_render(&renderer, &state));
     assert(dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
     close(saved_stdout);
+    output_length = read(output_pipe[0], output, sizeof(output) - 1);
+    assert(output_length >= 0);
+    output[output_length] = '\0';
     close(output_pipe[0]);
+    assert(strstr(output, "\x1b[30;47m") != NULL);
 
-    cell = screen_buffer_get(&renderer.screen_buffer, renderer.screen_buffer.rows - 1, 0);
+    cell = screen_buffer_get(&renderer.screen_buffer, renderer.screen_buffer.rows - 2, 0);
     assert(cell != NULL && cell->code_point == 'S');
-    cell = screen_buffer_get(&renderer.screen_buffer, renderer.screen_buffer.rows - 1, 5);
+    cell = screen_buffer_get(&renderer.screen_buffer, renderer.screen_buffer.rows - 2, 5);
     assert(cell != NULL && cell->code_point == ' ');
+
+    /* The row before the Message Bar is blank; the Status Bar is last. */
+    for (size_t column = 0; column < renderer.screen_buffer.columns; ++column)
+    {
+        cell = screen_buffer_get(&renderer.screen_buffer, renderer.document_rows, column);
+        assert(cell != NULL && cell->code_point == (uint32_t)' ');
+    }
+    cell = screen_buffer_get(&renderer.screen_buffer, renderer.screen_buffer.rows - 1, 0);
+    assert(cell != NULL && cell->code_point == '[');
 
     assert(editor_state_set_message(&state, ""));
     assert(pipe(output_pipe) == 0);
@@ -498,7 +514,7 @@ static void test_renderer_draws_message_bar(void)
 
     for (size_t column = 0; column < renderer.screen_buffer.columns; ++column)
     {
-        cell = screen_buffer_get(&renderer.screen_buffer, renderer.screen_buffer.rows - 1, column);
+        cell = screen_buffer_get(&renderer.screen_buffer, renderer.screen_buffer.rows - 2, column);
         assert(cell != NULL && cell->code_point == (uint32_t)' ');
     }
 
@@ -547,7 +563,7 @@ static void test_renderer_rejects_cursor_outside_viewport(void)
     Renderer renderer;
 
     assert(editor_state_init(&state));
-    assert(renderer_init(&renderer, 3, 4));
+    assert(renderer_init(&renderer, 4, 4));
 
     state.viewport.viewport_row = 1;
     assert(!renderer_render(&renderer, &state));
@@ -575,7 +591,7 @@ static void test_renderer_renders_zero_line_document(void)
     cursor_init(&state.cursor);
     viewport_init(&state.viewport);
 
-    assert(renderer_init(&renderer, 3, 3));
+    assert(renderer_init(&renderer, 4, 3));
     assert(pipe(output_pipe) == 0);
     saved_stdout = dup(STDOUT_FILENO);
     assert(saved_stdout >= 0);

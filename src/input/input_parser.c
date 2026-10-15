@@ -26,6 +26,7 @@ void input_parser_init(InputParser *parser)
     parser->utf8_code_point = 0;
     parser->utf8_minimum = 0;
     parser->utf8_remaining = 0;
+    parser->csi_parameter = 0;
 }
 
 static void input_event_clear(InputEvent *event)
@@ -144,6 +145,7 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
         if (byte == '[')
         {
             parser->state = INPUT_PARSER_CSI;
+            parser->csi_parameter = 0;
         }
         else if (byte == INPUT_ESCAPE)
         {
@@ -157,7 +159,36 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
         return true;
     }
 
+    if (parser->state == INPUT_PARSER_CSI_PARAMETER)
+    {
+        if (byte >= '0' && byte <= '9')
+        {
+            if (parser->csi_parameter <= 999)
+            {
+                parser->csi_parameter = parser->csi_parameter * 10U +
+                                        (unsigned int)(byte - '0');
+            }
+            return true;
+        }
+
+        if (byte == '~' && parser->csi_parameter == 3)
+        {
+            event->type = INPUT_EVENT_DELETE;
+        }
+        parser->state = INPUT_PARSER_NORMAL;
+        parser->csi_parameter = 0;
+        return true;
+    }
+
+    if (byte >= '0' && byte <= '9')
+    {
+        parser->state = INPUT_PARSER_CSI_PARAMETER;
+        parser->csi_parameter = (unsigned int)(byte - '0');
+        return true;
+    }
+
     parser->state = INPUT_PARSER_NORMAL;
+    parser->csi_parameter = 0;
 
     if (byte == 'D')
     {
@@ -192,6 +223,7 @@ bool input_parser_timeout(InputParser *parser, InputEvent *event)
     parser->utf8_code_point = 0;
     parser->utf8_minimum = 0;
     parser->utf8_remaining = 0;
+    parser->csi_parameter = 0;
     input_event_clear(event);
     if (previous_state == INPUT_PARSER_ESCAPE)
     {

@@ -4,7 +4,7 @@
 
 **Active — Volume X implementation**
 
-Chapters 45–50 are implemented in the current source snapshot. Chapter 51 now covers UTF-8 serialization, safe temporary-file replacement, Editor State Dirty Flag handling, Ctrl-S integration for the startup filename, and failure-path regression checks. A clean CMake build and all four registered CTest targets (`smoke`, `editing`, `file`, and `file_save`) pass.
+Chapters 45–51 and Chapter 52 sections 52.2–52.8 are implemented in the current source snapshot. The interface includes a bottom Status Bar, a white Message Bar with black text, filename editing with cursor navigation and Delete, and dirty-quit confirmation. Ctrl-S saves named documents to their current path and opens filename entry for unnamed documents; no separate Save As command is implemented. Debug and warning-clean builds pass all eight CTest targets, and pseudo-terminal checks cover the latest interface flows.
 
 ## Completed
 
@@ -149,53 +149,45 @@ The current build and registered tests pass, and the user has confirmed the two 
 | Repository and Git workflow                                 | Established                                                                                         |
 | CMake and C99 configuration                                 | Established                                                                                         |
 | Terminal initialization, raw mode, restoration, and cleanup | Implemented                                                                                         |
-| Application lifecycle and event loop                        | Implemented; input handling remains temporary                                                       |
+| Application lifecycle and event loop                        | Implemented; complete parser-to-command pipeline                                                       |
 | Editor State                                                | Implemented                                                                                         |
 | Document                                                    | Vector of logical lines; insertion, deletion, splitting, and merging implemented                    |
 | Cursor                                                      | Validated logical position, horizontal and vertical movement, preferred-column behavior implemented |
 | Viewport                                                    | Vertical and horizontal offsets and Cursor visibility maintenance implemented                       |
 | Screen Buffer                                               | Implemented                                                                                         |
-| Renderer                                                    | Full redraw of the visible document region; reserves the final physical terminal column             |
-| Printable ASCII insertion                                   | Implemented                                                                                         |
+| Renderer                                                    | Full redraw; bottom Status Bar, styled Message Bar, and separator row                                 |
+| Unicode character insertion                                | UTF-8 input events and Unicode scalar insertion implemented                                              |
 | Backspace character deletion and line merging               | Implemented                                                                                         |
 | Enter and logical-line splitting                            | Implemented                                                                                         |
 | Dirty Flag                                                  | Updated after successful insertion, deletion, splitting, and merging                                |
-| Full document navigation                                    | Implemented for the current ASCII-only model                                                        |
+| Cursor navigation                                           | Arrow-key movement implemented; Home, End, Page Up, and Page Down deferred                              |
 | Viewport and scrolling                                      | Implemented; vertical and horizontal behavior manually verified in WSL                              |
 | File loading                                                | Implemented: UTF-8 decode, LF/CRLF normalization, empty files, startup filename                      |
-| File saving                                                 | File Manager + Editor State API + Ctrl-S for startup filename implemented; Save As and feedback pending |
-| Dedicated Input Parser and command pipeline                 | Not implemented; basic input recognition remains in the event loop                                  |
-| Status Bar and Message Bar                                  | Not implemented                                                                                     |
+| File saving                                                 | Safe save implemented; Ctrl-S saves current path or opens filename entry for unnamed documents       |
+| Dedicated Input Parser and command pipeline                 | Input Parser, Input Engine, and Command Engine implemented                                             |
+| Status Bar and Message Bar                                  | Implemented; Status Bar bottom, white Message Bar, one-row separator                                   |
 | Terminal resize handling                                    | Not implemented                                                                                     |
 | Unicode-aware input and display-width mapping               | Not implemented                                                                                     |
-| Automated tests                                             | `smoke`, `editing`, and `file` pass; broader coverage pending                                        |
+| Automated tests                                             | Eight CTest targets pass in Debug and warning-clean builds                                             |
 | Hardening and final integration                             | Pending                                                                                             |
 
 ## Current Milestone
 
-**Chapter 51 — Saving Files: implemented through Section 51.5 for the existing-file workflow**
+**Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation**
 
-The File Manager serializes the Document as UTF-8 with canonical LF line endings, writes through a same-directory temporary file, checks writes and close, and atomically replaces the destination with `rename()`. Editor State clears the Dirty Flag only after successful replacement. Ctrl-S saves to the startup filename. Failure tests cover invalid scalar data and replacement failure, including destination/state preservation and temporary-file cleanup. Save As and Message Bar feedback remain pending.
+The current implementation has the complete input pipeline, filename entry for unnamed documents, refined interface layout, and dirty-quit confirmation. Ctrl-S saves a named document to its current path; no separate Save As command is implemented. Eight CTest targets pass in Debug and warning-clean builds, and pseudo-terminal integration covers the changed workflows.
 
 ## Next Milestone
 
-**Chapter 52 — Completing the Editor Interface**
-
-Chapter 51 is implemented through Section 51.5 for saving an existing file. Next, implement the Status Bar and Message Bar according to the project architecture. Use the Message Bar to surface save success and failure without adding direct status output to `main.c`. Save As for unnamed Documents remains out of scope unless the project requirements explicitly call for it.
+**Chapter 53 — Hardening.** Focus on invariants, boundary cases, failure paths, sanitizers, and broader regression tests. Home, End, Page Up, Page Down, document Delete, and Tab remain follow-up work for the earlier navigation/editing milestones.
 
 ## Current Limitations
 
-- Only printable ASCII characters are accepted for insertion.
-- The terminal Delete key is not implemented; Backspace is supported.
-- UTF-8-aware input and Unicode display-width mapping are not implemented.
-- Tab expansion is not implemented.
-- Ctrl-S saves to the filename supplied at startup; Save As for an unnamed Document is not implemented.
-- Save feedback is pending the Message Bar.
-- Input handling remains temporarily inside the application event loop rather than a dedicated Input Parser, Input Engine, and Command Engine pipeline.
-- The Status Bar and Message Bar are not implemented.
-- Terminal resize handling and frame reinitialization are not implemented.
-- Comprehensive automated testing, broader failure-path regression testing, hardening, and final integration remain future work.
-- The Renderer deliberately reserves the terminal's final physical column to avoid the right-edge wrapping behavior observed in WSL; this reduces the usable rendering width by one column.
+- Non-ASCII filename bytes are preserved for file operations but rendered as `?` in the Status Bar and filename-entry prompt.
+- Document Delete, Home, End, Page Up, Page Down, and Tab are not implemented yet; Delete-key input is currently handled only during filename entry.
+- Ctrl-S on a named document saves to the current path. A separate Save As command is intentionally deferred.
+- Terminal resizing and frame reinitialization are not implemented.
+- Broader allocation-failure, sanitizer, and terminal-size integration coverage remains part of hardening.
 
 ## Chapter 51 — Saving Files (Sections 51.2–51.5)
 
@@ -234,3 +226,50 @@ Chapter 51 is implemented through Section 51.5 for saving an existing file. Next
 - [x] Pass a separate warning-clean build with `-Wall -Wextra -Wpedantic -Werror`.
 - [x] Verify successful save and recoverable replacement failure in pseudo-terminal integration checks.
 - [x] Keep visible save feedback deferred to the Message Bar implementation.
+
+## Chapter 52 — Section 52.5: Input Engine and Command Dispatch (2026-10-15)
+
+- [x] Added `src/input/input_engine.h/.c` to map abstract input events to editor commands.
+- [x] Added `src/command/command_engine.h/.c` to execute editing, movement, save, and quit commands.
+- [x] Refactored `main.c` to orchestrate Input Handler → Input Parser → Input Engine → Command Engine → Renderer.
+- [x] Added `test_input_engine` and `test_command_engine` CTest targets.
+- [x] Debug build and all seven tests pass.
+- [x] Warning-clean build with `-Wall -Wextra -Wpedantic -Werror` and all seven tests pass.
+- [x] Pseudo-terminal integration verified insertion, Ctrl-S save, and Ctrl-Q exit.
+- [ ] Filename-entry and Save As remain unimplemented.
+
+Next: Chapter 52.6 — integration review and key-binding boundary before filename-entry and Save As.
+
+
+### Chapter 52.7 — Filename Entry and Save As
+
+- [x] Added `EDITOR_COMMAND_CANCEL` and `INPUT_EVENT_ESCAPE`; standalone Escape is emitted when the Input Handler timeout expires while the parser is in the Escape state.
+- [x] Ctrl-S starts filename entry when Editor State has no associated path. Ctrl-S on an associated document continues saving to its current path.
+- [x] Added bounded filename entry in Editor State; printable Unicode input is encoded as UTF-8, Backspace removes one UTF-8 code point, Enter confirms, and Escape cancels.
+- [x] Renderer displays the `Save as:` prompt in the Status Bar and places the terminal cursor at the entry position.
+- [x] Added `editor_state_save_as()`: allocates the new path before saving, then updates file association and clears the Dirty Flag only after successful atomic save.
+- [x] Save failure keeps filename entry active for correction/retry and preserves file association, Document, and Dirty Flag.
+- [x] Cancellation closes filename entry without changing the file association, Document, or Dirty Flag.
+- [x] Added tests for Save As success, Backspace, failed save, cancellation, association preservation, and Escape parsing/dispatch.
+- [x] Debug build and all eight CTest targets pass.
+- [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight tests pass.
+- [x] Pseudo-terminal integration checks verify Save As persistence and Escape cancellation.
+
+Current next milestone: Chapter 53 — Hardening. The user explicitly deferred a separate Save As command. Home, End, Page Up, Page Down, document Delete, and Tab remain follow-up work for the earlier navigation/editing milestones.
+
+
+### Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation
+
+- [x] Moved the Status Bar to the bottom terminal row.
+- [x] Added one blank separator row between document text and the Message Bar.
+- [x] Rendered the Message Bar with black foreground and white background; filename-entry cursor uses the same rendition.
+- [x] Moved filename entry to the Message Bar and tracks a byte cursor at UTF-8 code-point boundaries.
+- [x] Added Left/Right navigation, insertion at the cursor, Backspace, and Delete (`CSI 3 ~`) to filename entry.
+- [x] Added dirty-quit confirmation: `Y` saves and quits, `N` discards and quits, Escape cancels.
+- [x] Choosing save for an unnamed Document opens filename entry; quit occurs only after successful saving.
+- [x] Added tests for filename cursor editing, UTF-8 boundary deletion, named/unnamed save-before-quit, cancellation, and discard.
+- [x] Debug build and all eight CTest targets pass.
+- [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight tests pass.
+- [x] Pseudo-terminal checks pass for filename editing/saving, Message Bar styling, and dirty-quit workflows.
+
+Next: Chapter 53 — Hardening. Document navigation keys and Tab remain deferred to their earlier implementation milestones. No separate Save As command is planned for the current baseline.

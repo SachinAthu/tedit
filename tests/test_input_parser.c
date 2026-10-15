@@ -60,6 +60,13 @@ static void test_arrow_sequences(void)
     event = feed(&parser, '[');
     event = feed(&parser, 'D');
     assert(event.type == INPUT_EVENT_ARROW_LEFT);
+
+    event = feed(&parser, 0x1B);
+    event = feed(&parser, '[');
+    event = feed(&parser, '3');
+    assert(event.type == INPUT_EVENT_NONE && input_parser_is_waiting(&parser));
+    event = feed(&parser, '~');
+    assert(event.type == INPUT_EVENT_DELETE && !input_parser_is_waiting(&parser));
 }
 
 static void test_escape_timeout_and_recovery(void)

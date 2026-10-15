@@ -644,3 +644,29 @@ Added a regression case for the atomic replacement failure path. The test create
 The earlier invalid-code-point test continues to exercise a serialization failure and verifies that an existing destination file remains byte-for-byte unchanged. These tests do not simulate kernel-level write or close failures; those paths remain guarded in the implementation but are not directly injected by the current test harness. `fsync()` durability and destination metadata preservation remain explicitly deferred by the baseline design.
 
 Verification for Section 51.5: the standard CMake configure/build succeeded; a separate build with `-Wall -Wextra -Wpedantic -Werror` succeeded; `smoke`, `editing`, `file`, and `file_save` passed in both builds. Pseudo-terminal checks verified both successful Ctrl-S persistence and that a replacement failure does not terminate the Event Loop; the failure case also confirmed temporary-file cleanup. Chapter 51 is complete for the current existing-file save workflow. The next milestone is Chapter 52, where the Message Bar should provide visible save feedback without bypassing the Renderer/terminal output path.
+
+## Chapter 52.5 — Input Engine and Command Dispatch
+
+The Input Engine translates `InputEvent` values into `EditorCommand` values without reading terminal bytes or mutating Editor State. The Command Engine executes editing, cursor movement, save, and quit commands against Editor State and reports whether the Event Loop should redraw or quit. The Event Loop now orchestrates Input Handler → Input Parser → Input Engine → Command Engine → optional Renderer redraw. Save feedback remains routed through Editor State and the Renderer; Save As is still deferred.
+
+Verification: Debug and warning-clean builds passed all seven CTest targets (`smoke`, `editing`, `file`, `file_save`, `input_parser`, `input_engine`, `command_engine`). A pseudo-terminal integration check verified insertion, Ctrl-S persistence, and Ctrl-Q exit. Next is Chapter 52.6 — integration review and key-binding boundary.
+
+
+## Chapter 52 — Section 52.7: Filename Entry and Save As
+
+Ctrl-S now has two paths. If `EditorState.file_path` exists (or a startup save path is available), it saves to the associated path. If the document is unnamed, it activates bounded filename entry. The Status Bar changes to a `Save as:` prompt, and the Renderer positions the terminal cursor after the entered path. Printable input is encoded into UTF-8 bytes, Backspace removes the last encoded code point, Enter attempts the save, and standalone Escape cancels after the Input Handler's Escape timeout.
+
+`editor_state_save_as()` copies the candidate path before invoking `file_save_document()`. Only after the File Manager reports success does Editor State replace `file_path` and clear `is_dirty`. On failure, the filename prompt remains active so the user can correct the path or cancel; the existing file association, Document, and Dirty Flag remain unchanged. Cancellation clears only the transient filename-entry state and updates the Message Bar. The Command Engine ignores unrelated commands while the filename prompt is active.
+
+Verification: all eight CTest targets pass in Debug and with `-Wall -Wextra -Wpedantic -Werror`. Pseudo-terminal checks verified entering a path, saving `x\n`, exiting normally, and canceling filename entry with Escape. Known presentation limitation: non-ASCII filename bytes are rendered as `?` in the prompt/status row, although the UTF-8 path bytes are retained for filesystem operations.
+
+
+## Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation
+
+The final screen layout uses `rows - 3` document rows, one blank separator row, the Message Bar at `rows - 2`, and the Status Bar at `rows - 1`. The Renderer applies ANSI `30;47` rendition to the entire Message Bar row and sets the same rendition before placing the cursor in filename-entry mode. Other rows begin with a rendition reset. Filename entry moved from the Status Bar to the Message Bar, so the Renderer chooses a short prompt prefix based on the current entry error and positions the cursor after that prefix plus `filename_entry_cursor`.
+
+`EditorState` now tracks `filename_entry_cursor`, `quit_confirmation_active`, and `quit_after_save`. Filename edits insert/delete complete UTF-8 code points at byte offsets. The Input Parser recognizes the common Delete sequence `ESC [ 3 ~`; the Input Engine maps it to `EDITOR_COMMAND_DELETE_CHARACTER`, which is acted upon only while filename entry is active. Document Delete behavior remains deferred to the earlier navigation/editing milestone.
+
+Ctrl-Q checks the Dirty Flag. A clean document exits immediately. A dirty document enters a confirmation state: `Y` routes through the existing save path, `N` quits without saving, and Escape cancels. If there is no associated path, choosing `Y` activates filename entry and records `quit_after_save`; only successful saving causes the Event Loop to exit. Save failure leaves the editor open and the Dirty Flag set. The existing safe-save and atomic replacement implementation is unchanged. The user explicitly chose not to add a separate Save As command for named documents; Ctrl-S keeps its existing meaning.
+
+Verification: Debug and warning-clean builds pass all eight CTest targets. Pseudo-terminal checks verified filename insertion/movement/Delete and save, white-background/black-foreground Message Bar output, and dirty-quit confirmation, Escape cancellation, and discard.

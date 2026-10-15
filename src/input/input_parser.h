@@ -16,7 +16,8 @@ typedef enum
     INPUT_EVENT_ARROW_LEFT,
     INPUT_EVENT_ARROW_RIGHT,
     INPUT_EVENT_ARROW_UP,
-    INPUT_EVENT_ARROW_DOWN
+    INPUT_EVENT_ARROW_DOWN,
+    INPUT_EVENT_DELETE
 } InputEventType;
 
 typedef struct
@@ -29,7 +30,8 @@ typedef enum
 {
     INPUT_PARSER_NORMAL = 0,
     INPUT_PARSER_ESCAPE,
-    INPUT_PARSER_CSI
+    INPUT_PARSER_CSI,
+    INPUT_PARSER_CSI_PARAMETER
 } InputParserState;
 
 typedef struct
@@ -38,6 +40,7 @@ typedef struct
     uint32_t utf8_code_point;
     uint32_t utf8_minimum;
     unsigned int utf8_remaining;
+    unsigned int csi_parameter;
 } InputParser;
 
 void input_parser_init(InputParser *parser);

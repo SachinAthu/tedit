@@ -53,6 +53,119 @@ static void test_quit_and_noop(void)
     editor_state_destroy(&state);
 }
 
+
+static void test_filename_entry_cursor_editing(void)
+{
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+
+    assert(editor_state_init(&state));
+    execute(&state, EDITOR_COMMAND_SAVE, 0, &redraw, &should_quit);
+    assert(state.filename_entry_active && redraw);
+
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'a', &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'b', &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'c', &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_MOVE_LEFT, 0, &redraw, &should_quit);
+    assert(state.filename_entry_cursor == 2);
+
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'X', &redraw, &should_quit);
+    assert(strcmp(state.filename_entry, "abXc") == 0);
+    assert(state.filename_entry_cursor == 3);
+    execute(&state, EDITOR_COMMAND_MOVE_LEFT, 0, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_DELETE_CHARACTER, 0, &redraw, &should_quit);
+    assert(strcmp(state.filename_entry, "abc") == 0);
+    assert(state.filename_entry_cursor == 2);
+    execute(&state, EDITOR_COMMAND_DELETE_CHARACTER, 0, &redraw, &should_quit);
+    assert(strcmp(state.filename_entry, "ab") == 0);
+
+    execute(&state, EDITOR_COMMAND_MOVE_LEFT, 0, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_BACKSPACE, 0, &redraw, &should_quit);
+    assert(strcmp(state.filename_entry, "b") == 0);
+    assert(state.filename_entry_cursor == 0);
+
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 0x20AC, &redraw, &should_quit);
+    assert(state.filename_entry_length == 4);
+    assert(state.filename_entry_cursor == 3);
+    execute(&state, EDITOR_COMMAND_MOVE_LEFT, 0, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_DELETE_CHARACTER, 0, &redraw, &should_quit);
+    assert(strcmp(state.filename_entry, "b") == 0);
+    assert(state.filename_entry_length == 1 && state.filename_entry_cursor == 0);
+
+    execute(&state, EDITOR_COMMAND_CANCEL, 0, &redraw, &should_quit);
+    assert(!state.filename_entry_active && !state.is_dirty && state.file_path == NULL);
+    editor_state_destroy(&state);
+}
+
+static void test_dirty_quit_confirmation(void)
+{
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+
+    assert(editor_state_init(&state));
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'q', &redraw, &should_quit);
+    assert(state.is_dirty);
+
+    execute(&state, EDITOR_COMMAND_QUIT, 0, &redraw, &should_quit);
+    assert(redraw && !should_quit && state.quit_confirmation_active);
+    assert(strstr(state.message, "Save changes before quitting?") != NULL);
+
+    execute(&state, EDITOR_COMMAND_CANCEL, 0, &redraw, &should_quit);
+    assert(redraw && !should_quit && !state.quit_confirmation_active);
+    assert(state.is_dirty);
+    assert(strcmp(state.message, "Quit cancelled.") == 0);
+
+    execute(&state, EDITOR_COMMAND_QUIT, 0, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'n', &redraw, &should_quit);
+    assert(!redraw && should_quit && !state.quit_confirmation_active);
+    assert(state.is_dirty);
+    editor_state_destroy(&state);
+}
+
+static void test_dirty_quit_saves_unnamed_document(void)
+{
+    char path[] = "/tmp/tedit-quit-save-XXXXXX";
+    int descriptor = mkstemp(path);
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+    FILE *file;
+    char contents[16];
+    size_t length;
+
+    assert(descriptor >= 0);
+    assert(close(descriptor) == 0);
+    assert(unlink(path) == 0);
+    assert(editor_state_init(&state));
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'z', &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_QUIT, 0, &redraw, &should_quit);
+    assert(state.quit_confirmation_active && !should_quit);
+
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'y', &redraw, &should_quit);
+    assert(state.filename_entry_active && state.quit_after_save && !should_quit);
+    for (size_t index = 0; path[index] != '\0'; ++index)
+    {
+        execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, (unsigned char)path[index],
+                &redraw, &should_quit);
+    }
+    execute(&state, EDITOR_COMMAND_INSERT_NEWLINE, 0, &redraw, &should_quit);
+    assert(redraw && should_quit && !state.filename_entry_active);
+    assert(state.file_path != NULL && strcmp(state.file_path, path) == 0);
+    assert(!state.is_dirty && !state.quit_after_save);
+
+    file = fopen(path, "rb");
+    assert(file != NULL);
+    length = fread(contents, 1, sizeof(contents), file);
+    assert(!ferror(file));
+    assert(fclose(file) == 0);
+    assert(length == 2 && contents[0] == 'z' && contents[1] == '\n');
+
+    editor_state_destroy(&state);
+    assert(unlink(path) == 0);
+}
+
 static void test_invalid_arguments(void)
 {
     EditorState state;
@@ -67,6 +180,7 @@ static void test_invalid_arguments(void)
     assert(!command_engine_execute(&state, &command, NULL, &redraw, NULL));
     editor_state_destroy(&state);
 }
+
 
 static void test_save_as_success_and_backspace(void)
 {
@@ -157,6 +271,43 @@ static void test_save_as_failure_and_cancel_preserve_document(void)
     assert(rmdir(invalid_path) == 0);
 }
 
+
+static void test_dirty_quit_saves_named_document(void)
+{
+    char path[] = "/tmp/tedit-quit-named-XXXXXX";
+    int descriptor = mkstemp(path);
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+    FILE *file;
+    char contents[16];
+    size_t length;
+
+    assert(descriptor >= 0);
+    assert(close(descriptor) == 0);
+    assert(unlink(path) == 0);
+    assert(editor_state_init(&state));
+    assert(editor_state_save_as(&state, path));
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'n', &redraw, &should_quit);
+    assert(state.is_dirty);
+
+    execute(&state, EDITOR_COMMAND_QUIT, 0, &redraw, &should_quit);
+    assert(redraw && !should_quit && state.quit_confirmation_active);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'Y', &redraw, &should_quit);
+    assert(redraw && should_quit && !state.quit_confirmation_active);
+    assert(!state.is_dirty && state.file_path != NULL && strcmp(state.file_path, path) == 0);
+
+    file = fopen(path, "rb");
+    assert(file != NULL);
+    length = fread(contents, 1, sizeof(contents), file);
+    assert(!ferror(file));
+    assert(fclose(file) == 0);
+    assert(length == 2 && contents[0] == 'n' && contents[1] == '\n');
+
+    editor_state_destroy(&state);
+    assert(unlink(path) == 0);
+}
+
 int main(void)
 {
     test_editing_commands();
@@ -164,5 +315,9 @@ int main(void)
     test_invalid_arguments();
     test_save_as_success_and_backspace();
     test_save_as_failure_and_cancel_preserve_document();
+    test_filename_entry_cursor_editing();
+    test_dirty_quit_confirmation();
+    test_dirty_quit_saves_unnamed_document();
+    test_dirty_quit_saves_named_document();
     return 0;
 }

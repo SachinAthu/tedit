@@ -73,7 +73,10 @@ static void test_end_to_end_input_pipeline(void)
     assert(state.is_dirty);
 
     feed_and_execute(&parser, &state, 0x11, &redraw, &should_quit);
-    assert(!redraw && should_quit);
+    assert(redraw && !should_quit && state.quit_confirmation_active);
+    assert(strstr(state.message, "Save changes before quitting?") != NULL);
+    feed_and_execute(&parser, &state, 'n', &redraw, &should_quit);
+    assert(!redraw && should_quit && !state.quit_confirmation_active);
 
     editor_state_destroy(&state);
 }

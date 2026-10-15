@@ -6,11 +6,13 @@ Terminal text editor implementation in C99 for Linux/POSIX, developed incrementa
 
 ## Current Milestone
 
-**Chapter 51 — Saving Files: Sections 51.2–51.5 implemented; interface feedback remains pending**
+**Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation implemented**
 
-The current implementation supports opening a file supplied at startup and saving changes back to that same path with Ctrl-S. The File Manager serializes the complete Document as UTF-8 using canonical LF line endings and safe temporary-file replacement. Editor State clears the Dirty Flag only after a successful save. The existing direct input loop remains in place; Save As for unnamed Documents and visible save feedback are not yet implemented because the Message Bar is still pending.
+The interface layout now places the Status Bar on the bottom row, reserves one blank separator row above the white Message Bar, and renders Message Bar text in black. During filename entry, the prompt and terminal cursor use the Message Bar row. Filename editing supports Left/Right, insertion at the cursor, Backspace, and Delete; movement and deletion respect UTF-8 byte boundaries.
 
-CMake configuration and build succeed, and all four registered CTest targets (`smoke`, `editing`, `file`, and `file_save`) pass. A pseudo-terminal integration check verified that an edit is persisted after Ctrl-S. Earlier manual testing in WSL also confirmed that reserving the terminal's final physical column prevents the right-edge behavior that affected horizontal scrolling.
+Ctrl-Q exits immediately for a clean Document. For a dirty Document, it prompts for a decision: `Y` saves and quits, `N` discards changes and quits, and Escape cancels quitting. Saving an unnamed Document opens filename entry; failed saves keep the editor open and preserve the Dirty Flag. No separate Save As command for named documents has been added: Ctrl-S retains save-to-current-path behavior.
+
+Debug and warning-clean builds succeed, and all eight CTest targets pass in both configurations. Pseudo-terminal integration checks passed for filename editing and saving, Message Bar styling, and dirty-quit confirmation/cancellation/discard.
 
 ## Completed
 
@@ -333,24 +335,21 @@ The Screen Buffer is presentation data and does not replace the Document as the 
 
 ## Known Limitations
 
-- Delete-key behavior is not implemented.
-- Interactive input supports printable ASCII only; tab expansion and Unicode display-width mapping are not implemented.
-- File loading and Ctrl-S saving to the startup filename are implemented; Save As and visible save feedback are not implemented.
-- Input Handler, Input Parser, Input Engine, and Command Engine integration is not implemented; input handling remains temporarily in `main.c`.
-- Status Bar and Message Bar are not implemented.
+- Non-ASCII filename bytes are preserved for filesystem operations but currently displayed as `?` in the Status Bar and filename-entry prompt.
+- Delete is supported only during filename entry. Document Delete behavior remains a navigation/editing follow-up, as agreed.
+- Home, End, Page Up, Page Down, and Tab support remain deferred to the earlier navigation and editing milestones.
+- No separate Save As command exists for an already-associated document; Ctrl-S saves to its current path.
 - Terminal resizing and Screen Buffer reinitialization are not implemented.
 - Incremental or dirty-cell rendering is not implemented.
 - Allocation-failure paths and a broader terminal-size integration matrix need additional coverage.
 
 ## Current Focus
 
-**Chapter 51 — Saving Files is implemented through Section 51.5 for the existing-file workflow.** Ctrl-S calls the Editor State save API when a startup filename exists. Failure-path tests cover serialization and replacement failures, including destination preservation, Dirty Flag preservation, and temporary-file cleanup. The build, four CTest targets, and a pseudo-terminal save integration check pass. Save As and Message Bar feedback remain pending.
+**Chapter 52 interface refinement is complete.** Status Bar/Message Bar placement, filename cursor editing, and unsaved-quit confirmation are implemented and regression-tested.
 
 ## Next Step
 
-**Next milestone — Chapter 52: Completing the Editor Interface**
-
-The Chapter 51 save path has been reviewed for the supported success and failure paths. The current loop recognizes Ctrl-S and saves to the startup filename. The Message Bar does not exist yet, so interactive success/failure feedback belongs in Chapter 52. Save As for unnamed Documents remains unimplemented. Do not introduce the later Input Parser / Command Engine architecture prematurely.
+**Chapter 53 — Hardening.** Begin invariant checks, boundary/failure-path review, sanitizer builds, and broader regression coverage. Navigation additions and Tab support remain tracked as follow-up work for their earlier implementation milestones.
 
 ## Chapter 51 Progress — Saving Through Editor State (Sections 51.2–51.3)
 
@@ -373,3 +372,25 @@ Verification: CMake configure/build succeeded; all four CTest targets passed. A 
 Added a replacement-failure regression test by attempting to save over an existing directory. The test confirms that the operation fails, the Editor State Dirty Flag remains set, the in-memory Document remains unchanged, the directory remains intact, and the temporary file is removed. This complements the existing invalid-code-point failure test, which verifies that an existing destination file is not replaced.
 
 Verification: CMake configure/build succeeded and all four CTest targets (`smoke`, `editing`, `file`, and `file_save`) passed. Save success was already checked through a pseudo-terminal session in Section 51.4; visible success/failure feedback remains deferred until the Message Bar is available.
+
+## Current Implementation Update — Chapter 52.5
+
+The Input Engine and Command Engine are now implemented as separate modules. The Input Engine maps parser events to command values. The Command Engine executes insert, Backspace, newline, cursor movement, save, and quit commands, and reports redraw/quit decisions to the Event Loop. `main.c` retains the POSIX Input Handler and coordinates the full pipeline. All seven CTest targets pass in both Debug and warning-clean builds; a pseudo-terminal integration check passed for editing, Ctrl-S, and Ctrl-Q. Save As and filename-entry remain unimplemented. Next: Chapter 52.6 integration review and key-binding boundary.
+
+
+## Chapter 52.7 — Filename Entry and Save As
+
+Ctrl-S saves to the current associated path. When no path is associated, it activates a bounded filename-entry mode. Printable input is encoded as UTF-8, Backspace removes the preceding code point, Enter attempts the safe save, and Escape cancels after the Input Handler timeout. The Renderer displays the `Save as:` prompt in the Status Bar and places the terminal cursor at the entry point.
+
+`editor_state_save_as()` allocates the candidate path before writing and updates `file_path` plus the Dirty Flag only after successful save. Failure keeps the prompt active for correction or cancellation; cancellation and failure preserve the previous association, Document, and Dirty Flag.
+
+All eight CTest targets pass in Debug and warning-clean builds. Pseudo-terminal checks verified Save As persistence and Escape cancellation.
+
+
+## Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation
+
+The Status Bar is now the final terminal row. The row immediately above it is the Message Bar, rendered with ANSI black foreground and white background; a blank row separates the Message Bar from the document area. Filename entry is rendered in the Message Bar, with cursor placement based on the UTF-8 byte boundary tracked by Editor State. Left/Right move between code-point boundaries, insertion occurs at the cursor, Backspace removes the preceding code point, and the Delete escape sequence (`CSI 3 ~`) removes the code point at the cursor. Document Delete remains intentionally unimplemented.
+
+Ctrl-Q exits immediately only when the Document is clean. When dirty, the Message Bar asks whether to save: `Y` saves and quits, `N` quits without saving, and Escape cancels. If the Document is unnamed, choosing `Y` starts filename entry and the application exits only after a successful save. Save failure preserves the Dirty Flag and keeps the editor active. No separate Save As command for named documents was added; Ctrl-S retains the current behavior.
+
+Verification: all eight CTest targets passed in Debug and warning-clean builds (`-Wall -Wextra -Wpedantic -Werror`). Pseudo-terminal checks verified filename insertion/movement/Delete/save, the Message Bar ANSI style, and dirty-quit confirmation, cancellation, and discard.

@@ -27,6 +27,9 @@ bool editor_state_init(EditorState *state)
     state->filename_entry_active = false;
     state->filename_entry[0] = '\0';
     state->filename_entry_length = 0;
+    state->filename_entry_cursor = 0;
+    state->quit_confirmation_active = false;
+    state->quit_after_save = false;
 
     return true;
 }
@@ -68,6 +71,9 @@ bool editor_state_load_file(EditorState *state, const char *path)
     state->filename_entry_active = false;
     state->filename_entry[0] = '\0';
     state->filename_entry_length = 0;
+    state->filename_entry_cursor = 0;
+    state->quit_confirmation_active = false;
+    state->quit_after_save = false;
 
     return true;
 }
@@ -160,4 +166,7 @@ void editor_state_destroy(EditorState *state)
     state->filename_entry_active = false;
     state->filename_entry[0] = '\0';
     state->filename_entry_length = 0;
+    state->filename_entry_cursor = 0;
+    state->quit_confirmation_active = false;
+    state->quit_after_save = false;
 }

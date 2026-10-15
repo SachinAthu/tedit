@@ -17,6 +17,7 @@ typedef enum
     EDITOR_COMMAND_MOVE_RIGHT,
     EDITOR_COMMAND_MOVE_UP,
     EDITOR_COMMAND_MOVE_DOWN,
+    EDITOR_COMMAND_DELETE_CHARACTER,
     EDITOR_COMMAND_SAVE,
     EDITOR_COMMAND_QUIT
 } EditorCommandType;
@@ -28,6 +29,10 @@ typedef struct
 } EditorCommand;
 
 /* Execute one command. redraw and should_quit are always initialized on success. */
-bool command_engine_execute(EditorState *state, const EditorCommand *command, const char *save_path, bool *redraw, bool *should_quit);
+bool command_engine_execute(EditorState *state,
+                            const EditorCommand *command,
+                            const char *save_path,
+                            bool *redraw,
+                            bool *should_quit);
 
 #endif

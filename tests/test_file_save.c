@@ -180,6 +180,7 @@ static void test_zero_line_document_saves_empty_file(void)
     assert(unlink(path) == 0);
 }
 
+
 static void test_save_as_association_changes_only_after_success(void)
 {
     char original_path[] = "/tmp/tedit-save-as-original-XXXXXX";
