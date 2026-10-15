@@ -6,6 +6,7 @@
 #include "terminal/terminal.h"
 
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -398,6 +399,58 @@ static void test_renderer_uses_viewport_offsets(void)
     editor_state_destroy(&state);
 }
 
+/* The final row is the Status Bar and reports name, dirty state, and position. */
+static void test_renderer_draws_status_bar(void)
+{
+    EditorState state;
+    Renderer renderer;
+    const ScreenCell *cell;
+    size_t status_row;
+
+    assert(editor_state_init(&state));
+    assert(renderer_init(&renderer, 3, 40));
+    state.file_path = malloc(sizeof("notes.txt"));
+    assert(state.file_path != NULL);
+    memcpy(state.file_path, "notes.txt", sizeof("notes.txt"));
+    state.is_dirty = true;
+    state.cursor.row = 1;
+    state.cursor.column = 4;
+
+    /* Capture the renderer output so the test does not write control bytes. */
+    int output_pipe[2];
+    int saved_stdout;
+    assert(pipe(output_pipe) == 0);
+    saved_stdout = dup(STDOUT_FILENO);
+    assert(saved_stdout >= 0);
+    assert(dup2(output_pipe[1], STDOUT_FILENO) == STDOUT_FILENO);
+    close(output_pipe[1]);
+
+    assert(renderer_render(&renderer, &state));
+    assert(dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
+    close(saved_stdout);
+    close(output_pipe[0]);
+
+    status_row = renderer.screen_buffer.rows - 1;
+    cell = screen_buffer_get(&renderer.screen_buffer, status_row, 0);
+    assert(cell != NULL && cell->code_point == 'n');
+    cell = screen_buffer_get(&renderer.screen_buffer, status_row, 10);
+    assert(cell != NULL && cell->code_point == '[');
+    cell = screen_buffer_get(&renderer.screen_buffer, status_row, 11);
+    assert(cell != NULL && cell->code_point == '+');
+
+    /* Cursor information is right-aligned and uses one-based coordinates. */
+    const char expected_right[] = "Ln 2, Col 5";
+    size_t right_start = renderer.screen_buffer.columns - (sizeof(expected_right) - 1);
+    for (size_t index = 0; index < sizeof(expected_right) - 1; ++index)
+    {
+        cell = screen_buffer_get(&renderer.screen_buffer, status_row, right_start + index);
+        assert(cell != NULL && cell->code_point == (uint32_t)(unsigned char)expected_right[index]);
+    }
+
+    renderer_destroy(&renderer);
+    editor_state_destroy(&state);
+}
+
 /* A zero-line Document becomes editable on the first insertion or Enter. */
 static void test_zero_line_document_editing(void)
 {
@@ -654,6 +707,7 @@ int main(void)
     test_viewport_tracks_cursor_visibility();
     test_viewport_repeated_scrolling_and_screen_boundaries();
     test_renderer_uses_viewport_offsets();
+    test_renderer_draws_status_bar();
     test_renderer_rejects_cursor_outside_viewport();
     test_renderer_renders_zero_line_document();
     test_cursor_and_viewport_remain_synchronized_during_scrolling();

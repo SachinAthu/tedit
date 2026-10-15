@@ -162,7 +162,7 @@ static bool redraw_after_action(Renderer *renderer, EditorState *state)
             &state->viewport,
             state->cursor.row,
             state->cursor.column,
-            renderer->screen_buffer.rows,
+            renderer->document_rows,
             renderer->screen_buffer.columns))
     {
         return false;

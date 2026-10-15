@@ -22,6 +22,8 @@
 /* Fill an in-memory ScreenBuffer with the visible part of the document. */
 static bool renderer_build_frame(Renderer *renderer, const EditorState *state);
 
+static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *state);
+
 /* Send a finished ScreenBuffer to the terminal. */
 static bool renderer_write_frame(Renderer *renderer);
 
@@ -65,10 +67,17 @@ bool renderer_init(Renderer *renderer, size_t rows, size_t columns)
     renderer->screen_buffer.cells = NULL;
     renderer->screen_buffer.rows = 0;
     renderer->screen_buffer.columns = 0;
+    renderer->document_rows = 0;
     renderer->output_buffer = NULL;
     renderer->output_capacity = 0;
 
-    return screen_buffer_init(&renderer->screen_buffer, rows, columns);
+    if (rows < 2 || columns == 0 || !screen_buffer_init(&renderer->screen_buffer, rows, columns))
+    {
+        return false;
+    }
+
+    renderer->document_rows = rows - 1;
+    return true;
 }
 
 /*
@@ -128,7 +137,7 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
         renderer->screen_buffer.cells == NULL ||
         state->cursor.row < state->viewport.viewport_row ||
         state->cursor.column < state->viewport.viewport_column ||
-        state->cursor.row - state->viewport.viewport_row >= renderer->screen_buffer.rows ||
+        state->cursor.row - state->viewport.viewport_row >= renderer->document_rows ||
         state->cursor.column - state->viewport.viewport_column >= renderer->screen_buffer.columns)
     {
         return false;
@@ -204,7 +213,7 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
     screen_buffer_clear(&renderer->screen_buffer, (uint32_t)' ');
 
     /* Map each screen row to its corresponding logical document row. */
-    for (size_t screen_row = 0; screen_row < renderer->screen_buffer.rows; screen_row++)
+    for (size_t screen_row = 0; screen_row < renderer->document_rows; screen_row++)
     {
         const size_t document_row = state->viewport.viewport_row + screen_row;
         const DocumentLine *line;
@@ -227,6 +236,89 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
             }
 
             if (!screen_buffer_set(&renderer->screen_buffer, screen_row, screen_column, line->data[document_column]))
+            {
+                return false;
+            }
+        }
+    }
+
+    return renderer_draw_status_bar(renderer, state);
+}
+
+/* Draw filename, modified state, and one-based cursor position in the last row. */
+static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *state)
+{
+    char right[96];
+    const char *path;
+    const char *suffix;
+    size_t path_length;
+    size_t suffix_length;
+    int right_length;
+    size_t status_row;
+    size_t left_limit;
+    size_t path_limit;
+    size_t path_position = 0;
+    size_t right_position;
+
+    if (renderer == NULL || state == NULL || renderer->document_rows == 0)
+    {
+        return false;
+    }
+
+    path = state->file_path != NULL ? state->file_path : "[No Name]";
+    path_length = strlen(path);
+    suffix = state->is_dirty ? " [+]" : "";
+    suffix_length = strlen(suffix);
+    right_length = snprintf(right, sizeof(right), "Ln %zu, Col %zu", state->cursor.row + 1, state->cursor.column + 1);
+    if (right_length < 0 || (size_t)right_length >= sizeof(right))
+    {
+        return false;
+    }
+
+    status_row = renderer->screen_buffer.rows - 1;
+    left_limit = renderer->screen_buffer.columns > (size_t)right_length + 2
+                     ? renderer->screen_buffer.columns - (size_t)right_length - 2
+                     : 0;
+    path_limit = left_limit > suffix_length ? left_limit - suffix_length : 0;
+
+    for (size_t column = 0; column < renderer->screen_buffer.columns; ++column)
+    {
+        if (!screen_buffer_set(&renderer->screen_buffer, status_row, column, (uint32_t)' '))
+        {
+            return false;
+        }
+    }
+
+    /* Render a bounded path prefix; arbitrary filesystem bytes stay printable. */
+    while (path_position < path_length && path_position < path_limit)
+    {
+        unsigned char byte = (unsigned char)path[path_position];
+        uint32_t code_point = byte >= 0x20 && byte < 0x7F
+                                  ? byte
+                                  : (byte >= 0x80 ? (uint32_t)'?' : (uint32_t)' ');
+        if (!screen_buffer_set(&renderer->screen_buffer, status_row, path_position, code_point))
+        {
+            return false;
+        }
+        ++path_position;
+    }
+
+    for (size_t index = 0; index < suffix_length && path_position + index < left_limit; ++index)
+    {
+        if (!screen_buffer_set(&renderer->screen_buffer, status_row, path_position + index,
+                               (uint32_t)(unsigned char)suffix[index]))
+        {
+            return false;
+        }
+    }
+
+    if ((size_t)right_length < renderer->screen_buffer.columns)
+    {
+        right_position = renderer->screen_buffer.columns - (size_t)right_length;
+        for (size_t index = 0; index < (size_t)right_length; ++index)
+        {
+            if (!screen_buffer_set(&renderer->screen_buffer, status_row, right_position + index,
+                                   (uint32_t)(unsigned char)right[index]))
             {
                 return false;
             }

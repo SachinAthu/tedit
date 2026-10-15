@@ -1,4 +1,3 @@
-
 #define _POSIX_C_SOURCE 200809L
 
 #include "document/document.h"
@@ -170,6 +169,8 @@ static void test_editor_state_load_resets_cursor_viewport_and_dirty_flag(void)
     assert(state.viewport.viewport_row == 0);
     assert(state.viewport.viewport_column == 0);
     assert(!state.is_dirty);
+    assert(state.file_path != NULL);
+    assert(strcmp(state.file_path, path) == 0);
 
     assert(document_get_line(&state.document, 0)->length == 1);
     assert(document_get_line(&state.document, 0)->data[0] == (uint32_t)'a');
@@ -193,6 +194,9 @@ static void test_editor_state_failed_load_preserves_state(void)
     state.viewport.viewport_row = 3;
     state.viewport.viewport_column = 4;
     state.is_dirty = true;
+    state.file_path = malloc(sizeof("original.txt"));
+    assert(state.file_path != NULL);
+    memcpy(state.file_path, "original.txt", sizeof("original.txt"));
 
     assert(!editor_state_load_file(&state, "/tmp/tedit-no-such-file"));
 
@@ -204,6 +208,8 @@ static void test_editor_state_failed_load_preserves_state(void)
     assert(state.viewport.viewport_row == 3);
     assert(state.viewport.viewport_column == 4);
     assert(state.is_dirty);
+    assert(state.file_path != NULL);
+    assert(strcmp(state.file_path, "original.txt") == 0);
 
     editor_state_destroy(&state);
 }
