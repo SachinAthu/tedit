@@ -180,6 +180,50 @@ static void test_zero_line_document_saves_empty_file(void)
     assert(unlink(path) == 0);
 }
 
+static void test_save_as_association_changes_only_after_success(void)
+{
+    char original_path[] = "/tmp/tedit-save-as-original-XXXXXX";
+    char new_path[] = "/tmp/tedit-save-as-new-XXXXXX";
+    char failure_path[] = "/tmp/tedit-save-as-failure-XXXXXX";
+    int original_descriptor = mkstemp(original_path);
+    int new_descriptor = mkstemp(new_path);
+    int failure_descriptor = mkstemp(failure_path);
+    EditorState state;
+    const DocumentLine *line;
+
+    assert(original_descriptor >= 0 && new_descriptor >= 0 && failure_descriptor >= 0);
+    write_all(original_descriptor, (const unsigned char *)"old", 3);
+    assert(close(original_descriptor) == 0);
+    assert(close(new_descriptor) == 0);
+    assert(close(failure_descriptor) == 0);
+    assert(unlink(new_path) == 0);
+    assert(unlink(failure_path) == 0);
+    assert(mkdir(failure_path, 0700) == 0);
+
+    assert(editor_state_init(&state));
+    assert(editor_state_load_file(&state, original_path));
+    assert(state.file_path != NULL && strcmp(state.file_path, original_path) == 0);
+    assert(document_insert_character(&state.document, 0, 3, 'x'));
+    state.is_dirty = true;
+
+    assert(!editor_state_save_as(&state, failure_path));
+    assert(state.file_path != NULL && strcmp(state.file_path, original_path) == 0);
+    assert(state.is_dirty);
+    line = document_get_line(&state.document, 0);
+    assert(line != NULL && line->length == 4 && line->data[3] == 'x');
+
+    assert(editor_state_save_as(&state, new_path));
+    assert(state.file_path != NULL && strcmp(state.file_path, new_path) == 0);
+    assert(!state.is_dirty);
+    line = document_get_line(&state.document, 0);
+    assert(line != NULL && line->length == 4 && line->data[3] == 'x');
+
+    editor_state_destroy(&state);
+    assert(unlink(original_path) == 0);
+    assert(unlink(new_path) == 0);
+    assert(rmdir(failure_path) == 0);
+}
+
 int main(void)
 {
     test_editor_state_save_clears_dirty_flag_after_success();
@@ -187,6 +231,7 @@ int main(void)
     test_invalid_save_arguments_preserve_dirty_flag();
     test_replace_failure_preserves_state_and_cleans_temporary_file();
     test_zero_line_document_saves_empty_file();
+    test_save_as_association_changes_only_after_success();
     puts("File save tests passed.");
     return 0;
 }

@@ -134,12 +134,15 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
 {
     bool success;
 
-    if (renderer == NULL || state == NULL ||
-        renderer->screen_buffer.cells == NULL ||
-        state->cursor.row < state->viewport.viewport_row ||
-        state->cursor.column < state->viewport.viewport_column ||
-        state->cursor.row - state->viewport.viewport_row >= renderer->document_rows ||
-        state->cursor.column - state->viewport.viewport_column >= renderer->screen_buffer.columns)
+    if (renderer == NULL || state == NULL || renderer->screen_buffer.cells == NULL)
+    {
+        return false;
+    }
+    if (!state->filename_entry_active &&
+        (state->cursor.row < state->viewport.viewport_row ||
+         state->cursor.column < state->viewport.viewport_column ||
+         state->cursor.row - state->viewport.viewport_row >= renderer->document_rows ||
+         state->cursor.column - state->viewport.viewport_column >= renderer->screen_buffer.columns))
     {
         return false;
     }
@@ -161,7 +164,22 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
 
     if (success)
     {
-        success = renderer_write_cursor_position(state->cursor.row - state->viewport.viewport_row, state->cursor.column - state->viewport.viewport_column);
+        if (state->filename_entry_active)
+        {
+            const size_t prompt_length = sizeof("Save as: ") - 1;
+            size_t entry_column = prompt_length + state->filename_entry_length;
+            if (entry_column >= renderer->screen_buffer.columns)
+            {
+                entry_column = renderer->screen_buffer.columns - 1;
+            }
+            success = renderer_write_cursor_position(renderer->document_rows, entry_column);
+        }
+        else
+        {
+            success = renderer_write_cursor_position(
+                state->cursor.row - state->viewport.viewport_row,
+                state->cursor.column - state->viewport.viewport_column);
+        }
     }
 
     /*
@@ -271,7 +289,6 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
     suffix = state->is_dirty ? " [+]" : "";
     suffix_length = strlen(suffix);
     right_length = snprintf(right, sizeof(right), "Ln %zu, Col %zu", state->cursor.row + 1, state->cursor.column + 1);
-
     if (right_length < 0 || (size_t)right_length >= sizeof(right))
     {
         return false;
@@ -289,6 +306,34 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
         {
             return false;
         }
+    }
+
+    if (state->filename_entry_active)
+    {
+        static const char prompt[] = "Save as: ";
+        size_t column = 0;
+
+        while (column < sizeof(prompt) - 1 && column < renderer->screen_buffer.columns)
+        {
+            if (!screen_buffer_set(&renderer->screen_buffer, status_row, column, (uint32_t)(unsigned char)prompt[column]))
+            {
+                return false;
+            }
+            ++column;
+        }
+
+        for (size_t index = 0; index < state->filename_entry_length && column < renderer->screen_buffer.columns; ++index, ++column)
+        {
+            const unsigned char byte = (unsigned char)state->filename_entry[index];
+            const uint32_t code_point = byte >= 0x20 && byte < 0x7F
+                                            ? byte
+                                            : (byte >= 0x80 ? (uint32_t)'?' : (uint32_t)' ');
+            if (!screen_buffer_set(&renderer->screen_buffer, status_row, column, code_point))
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     /* Render a bounded path prefix; arbitrary filesystem bytes stay printable. */
@@ -337,7 +382,8 @@ static bool renderer_draw_message_bar(Renderer *renderer, const EditorState *sta
     size_t message_length;
     size_t visible_length;
 
-    if (renderer == NULL || state == NULL || renderer->screen_buffer.cells == NULL || renderer->screen_buffer.rows < 3)
+    if (renderer == NULL || state == NULL || renderer->screen_buffer.cells == NULL ||
+        renderer->screen_buffer.rows < 3)
     {
         return false;
     }

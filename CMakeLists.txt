@@ -15,6 +15,9 @@ add_library(
     tedit_core
     STATIC
     src/terminal/terminal.c
+    src/input/input_parser.c
+    src/input/input_engine.c
+    src/command/command_engine.c
     src/state/editor_state.c
     src/document/document.c
     src/cursor/cursor.c
@@ -40,13 +43,25 @@ add_executable(test_smoke tests/test_smoke.c)
 add_executable(test_editing tests/test_editing.c)
 add_executable(test_file tests/test_file.c)
 add_executable(test_file_save tests/test_file_save.c)
+add_executable(test_input_parser tests/test_input_parser.c)
+add_executable(test_input_engine tests/test_input_engine.c)
+add_executable(test_command_engine tests/test_command_engine.c)
+add_executable(test_input_pipeline tests/test_input_pipeline.c)
 
 target_link_libraries(test_smoke PRIVATE tedit_core)
 target_link_libraries(test_editing PRIVATE tedit_core)
 target_link_libraries(test_file PRIVATE tedit_core)
 target_link_libraries(test_file_save PRIVATE tedit_core)
+target_link_libraries(test_input_parser PRIVATE tedit_core)
+target_link_libraries(test_input_engine PRIVATE tedit_core)
+target_link_libraries(test_command_engine PRIVATE tedit_core)
+target_link_libraries(test_input_pipeline PRIVATE tedit_core)
 
 add_test(NAME smoke COMMAND test_smoke)
 add_test(NAME editing COMMAND test_editing)
 add_test(NAME file COMMAND test_file)
 add_test(NAME file_save COMMAND test_file_save)
+add_test(NAME input_parser COMMAND test_input_parser)
+add_test(NAME input_engine COMMAND test_input_engine)
+add_test(NAME command_engine COMMAND test_command_engine)
+add_test(NAME input_pipeline COMMAND test_input_pipeline)

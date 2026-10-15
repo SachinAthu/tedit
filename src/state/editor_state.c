@@ -23,6 +23,10 @@ bool editor_state_init(EditorState *state)
     viewport_init(&state->viewport);
     state->is_dirty = false;
     state->file_path = NULL;
+    state->message[0] = '\0';
+    state->filename_entry_active = false;
+    state->filename_entry[0] = '\0';
+    state->filename_entry_length = 0;
 
     return true;
 }
@@ -61,6 +65,9 @@ bool editor_state_load_file(EditorState *state, const char *path)
     cursor_init(&state->cursor);
     viewport_init(&state->viewport);
     state->is_dirty = false;
+    state->filename_entry_active = false;
+    state->filename_entry[0] = '\0';
+    state->filename_entry_length = 0;
 
     return true;
 }
@@ -81,6 +88,61 @@ bool editor_state_save_file(EditorState *state, const char *path)
     return true;
 }
 
+bool editor_state_save_as(EditorState *state, const char *path)
+{
+    char *new_path;
+    size_t path_length;
+
+    if (state == NULL || path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+
+    path_length = strlen(path);
+    if (path_length == SIZE_MAX)
+    {
+        return false;
+    }
+
+    new_path = malloc(path_length + 1);
+    if (new_path == NULL)
+    {
+        return false;
+    }
+    memcpy(new_path, path, path_length + 1);
+
+    if (file_save_document(path, &state->document) != FILE_SAVE_OK)
+    {
+        free(new_path);
+        return false;
+    }
+
+    free(state->file_path);
+    state->file_path = new_path;
+    state->is_dirty = false;
+    return true;
+}
+
+bool editor_state_set_message(EditorState *state, const char *message)
+{
+    size_t length;
+
+    if (state == NULL || message == NULL)
+    {
+        return false;
+    }
+
+    length = strlen(message);
+    if (length >= sizeof(state->message))
+    {
+        length = sizeof(state->message) - 1;
+    }
+
+    memmove(state->message, message, length);
+    state->message[length] = '\0';
+    return true;
+}
+
 void editor_state_destroy(EditorState *state)
 {
     if (state == NULL)
@@ -94,4 +156,8 @@ void editor_state_destroy(EditorState *state)
     cursor_init(&state->cursor);
     viewport_init(&state->viewport);
     state->is_dirty = false;
+    state->message[0] = '\0';
+    state->filename_entry_active = false;
+    state->filename_entry[0] = '\0';
+    state->filename_entry_length = 0;
 }
