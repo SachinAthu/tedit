@@ -21,8 +21,8 @@
 
 /* Fill an in-memory ScreenBuffer with the visible part of the document. */
 static bool renderer_build_frame(Renderer *renderer, const EditorState *state);
-
 static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *state);
+static bool renderer_draw_message_bar(Renderer *renderer, const EditorState *state);
 
 /* Send a finished ScreenBuffer to the terminal. */
 static bool renderer_write_frame(Renderer *renderer);
@@ -71,12 +71,13 @@ bool renderer_init(Renderer *renderer, size_t rows, size_t columns)
     renderer->output_buffer = NULL;
     renderer->output_capacity = 0;
 
-    if (rows < 2 || columns == 0 || !screen_buffer_init(&renderer->screen_buffer, rows, columns))
+    if (rows < 3 || columns == 0 ||
+        !screen_buffer_init(&renderer->screen_buffer, rows, columns))
     {
         return false;
     }
 
-    renderer->document_rows = rows - 1;
+    renderer->document_rows = rows - 2;
     return true;
 }
 
@@ -242,10 +243,10 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
         }
     }
 
-    return renderer_draw_status_bar(renderer, state);
+    return renderer_draw_status_bar(renderer, state) && renderer_draw_message_bar(renderer, state);
 }
 
-/* Draw filename, modified state, and one-based cursor position in the last row. */
+/* Draw filename, modified state, and one-based cursor position in the Status Bar row. */
 static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *state)
 {
     char right[96];
@@ -270,12 +271,13 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
     suffix = state->is_dirty ? " [+]" : "";
     suffix_length = strlen(suffix);
     right_length = snprintf(right, sizeof(right), "Ln %zu, Col %zu", state->cursor.row + 1, state->cursor.column + 1);
+
     if (right_length < 0 || (size_t)right_length >= sizeof(right))
     {
         return false;
     }
 
-    status_row = renderer->screen_buffer.rows - 1;
+    status_row = renderer->document_rows;
     left_limit = renderer->screen_buffer.columns > (size_t)right_length + 2
                      ? renderer->screen_buffer.columns - (size_t)right_length - 2
                      : 0;
@@ -322,6 +324,45 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
             {
                 return false;
             }
+        }
+    }
+
+    return true;
+}
+
+/* Draw the current message on the final row, clipping it to screen width. */
+static bool renderer_draw_message_bar(Renderer *renderer, const EditorState *state)
+{
+    size_t message_row;
+    size_t message_length;
+    size_t visible_length;
+
+    if (renderer == NULL || state == NULL || renderer->screen_buffer.cells == NULL || renderer->screen_buffer.rows < 3)
+    {
+        return false;
+    }
+
+    message_row = renderer->screen_buffer.rows - 1;
+    message_length = strlen(state->message);
+    visible_length = message_length < renderer->screen_buffer.columns
+                         ? message_length
+                         : renderer->screen_buffer.columns;
+
+    for (size_t column = 0; column < renderer->screen_buffer.columns; ++column)
+    {
+        uint32_t code_point = (uint32_t)' ';
+
+        if (column < visible_length)
+        {
+            unsigned char byte = (unsigned char)state->message[column];
+            code_point = byte >= 0x20 && byte < 0x7F
+                             ? (uint32_t)byte
+                             : (byte >= 0x80 ? (uint32_t)'?' : (uint32_t)' ');
+        }
+
+        if (!screen_buffer_set(&renderer->screen_buffer, message_row, column, code_point))
+        {
+            return false;
         }
     }
 

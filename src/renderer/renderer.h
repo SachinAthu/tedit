@@ -12,8 +12,8 @@
  *
  *   - screen_buffer: the off-screen grid of characters we draw into before
  *                    sending the whole frame to the terminal.
- *   - document_rows: number of rows available to document text; the final
- *                    row is reserved for the Status Bar.
+ *   - document_rows: number of rows available to document text; the two
+ *                    rows below it are reserved for the Status Bar and Message Bar.
  *   - output_buffer: a reusable byte buffer that holds the frame (escape
  *                    sequences plus characters) about to be written out.
  *   - output_capacity: how many bytes output_buffer currently holds.
