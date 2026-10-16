@@ -225,8 +225,7 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
         {
             if (parser->csi_parameter <= 999)
             {
-                parser->csi_parameter = parser->csi_parameter * 10U +
-                                        (unsigned int)(byte - '0');
+                parser->csi_parameter = parser->csi_parameter * 10U + (unsigned int)(byte - '0');
             }
             return true;
         }

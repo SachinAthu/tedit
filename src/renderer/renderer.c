@@ -21,8 +21,11 @@
 
 /* Fill an in-memory ScreenBuffer with the visible part of the document. */
 static bool renderer_build_frame(Renderer *renderer, const EditorState *state);
+
 static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *state);
+
 static bool renderer_draw_message_bar(Renderer *renderer, const EditorState *state);
+
 static const char *renderer_filename_prompt_prefix(const EditorState *state);
 
 /* Send a finished ScreenBuffer to the terminal. */
@@ -173,8 +176,7 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
                 entry_column = renderer->screen_buffer.columns - 1;
             }
             success = renderer_write_all("\x1b[30;47m", 8) &&
-                      renderer_write_cursor_position(renderer->screen_buffer.rows - 2,
-                                                     entry_column);
+                      renderer_write_cursor_position(renderer->screen_buffer.rows - 2, entry_column);
         }
         else
         {
@@ -445,21 +447,16 @@ static bool renderer_draw_message_bar(Renderer *renderer, const EditorState *sta
 
     if (state->filename_entry_active)
     {
-        for (size_t index = 0; index < prompt_length &&
-                               index < renderer->screen_buffer.columns;
-             ++index)
+        for (size_t index = 0; index < prompt_length && index < renderer->screen_buffer.columns; ++index)
         {
-            if (!screen_buffer_set(&renderer->screen_buffer, message_row, index,
-                                   (uint32_t)(unsigned char)prompt[index]))
+            if (!screen_buffer_set(&renderer->screen_buffer, message_row, index, (uint32_t)(unsigned char)prompt[index]))
             {
                 return false;
             }
         }
 
         column = prompt_length;
-        for (size_t index = 0; index < state->filename_entry_length &&
-                               column < renderer->screen_buffer.columns;
-             ++index, ++column)
+        for (size_t index = 0; index < state->filename_entry_length && column < renderer->screen_buffer.columns; ++index, ++column)
         {
             const unsigned char byte = (unsigned char)state->filename_entry[index];
             const uint32_t code_point = byte >= 0x20 && byte < 0x7F
