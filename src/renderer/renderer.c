@@ -292,6 +292,7 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
     char right[96];
     const char *path;
     const char *suffix;
+    const char *hint;
     size_t path_length;
     size_t suffix_length;
     int right_length;
@@ -306,6 +307,35 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
         return false;
     }
 
+    status_row = renderer->screen_buffer.rows - 1;
+
+    /*
+     * While a prompt is capturing keys, the Status Bar row shows the prompt's
+     * key hints instead of the file name and cursor position, which do not
+     * change while the prompt is open.
+     */
+    if (state->filename_entry_active || state->quit_confirmation_active)
+    {
+        hint = state->filename_entry_active ? "Enter: save  Esc: cancel"
+                                            : "Y=save N=discard Esc=cancel";
+        for (size_t column = 0; column < renderer->screen_buffer.columns; ++column)
+        {
+            if (!screen_buffer_set(&renderer->screen_buffer, status_row, column, (uint32_t)' '))
+            {
+                return false;
+            }
+        }
+        for (size_t index = 0; hint[index] != '\0' && index < renderer->screen_buffer.columns; ++index)
+        {
+            if (!screen_buffer_set(&renderer->screen_buffer, status_row, index,
+                                   (uint32_t)(unsigned char)hint[index]))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
     path = state->file_path != NULL ? state->file_path : "[No Name]";
     path_length = strlen(path);
     suffix = state->is_dirty ? " [+]" : "";
@@ -317,7 +347,6 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
         return false;
     }
 
-    status_row = renderer->screen_buffer.rows - 1;
     left_limit = renderer->screen_buffer.columns > (size_t)right_length + 2
                      ? renderer->screen_buffer.columns - (size_t)right_length - 2
                      : 0;

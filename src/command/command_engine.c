@@ -62,8 +62,7 @@ static bool command_backspace(EditorState *state, bool *changed)
         {
             return true;
         }
-        if (!cursor_set_position(&state->cursor, &state->document,
-                                 previous_row, previous_length))
+        if (!cursor_set_position(&state->cursor, &state->document, previous_row, previous_length))
         {
             return false;
         }
@@ -303,7 +302,6 @@ static bool filename_entry_execute(EditorState *state, const EditorCommand *comm
         if (previous != state->filename_entry_cursor)
         {
             state->filename_entry_cursor = previous;
-            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
             *redraw = true;
         }
         return true;
@@ -317,7 +315,6 @@ static bool filename_entry_execute(EditorState *state, const EditorCommand *comm
         if (next != state->filename_entry_cursor)
         {
             state->filename_entry_cursor = next;
-            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
             *redraw = true;
         }
         return true;
@@ -327,15 +324,13 @@ static bool filename_entry_execute(EditorState *state, const EditorCommand *comm
     {
         if (state->filename_entry_cursor > 0)
         {
-            const size_t previous = filename_previous_boundary(state->filename_entry,
-                                                               state->filename_entry_cursor);
+            const size_t previous = filename_previous_boundary(state->filename_entry, state->filename_entry_cursor);
             const size_t removed = state->filename_entry_cursor - previous;
             memmove(state->filename_entry + previous,
                     state->filename_entry + state->filename_entry_cursor,
                     state->filename_entry_length - state->filename_entry_cursor + 1);
             state->filename_entry_length -= removed;
             state->filename_entry_cursor = previous;
-            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
             *redraw = true;
         }
         return true;
@@ -353,7 +348,6 @@ static bool filename_entry_execute(EditorState *state, const EditorCommand *comm
                     state->filename_entry + next,
                     state->filename_entry_length - next + 1);
             state->filename_entry_length -= removed;
-            (void)editor_state_set_message(state, "Enter: save  Esc: cancel");
             *redraw = true;
         }
         return true;
@@ -522,7 +516,7 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
         {
             state->quit_confirmation_active = true;
             state->quit_after_save = false;
-            (void)editor_state_set_message(state, "Save changes before quitting? Y=save N=discard Esc=cancel");
+            (void)editor_state_set_message(state, "Save changes before quitting?");
             *redraw = true;
         }
         else
