@@ -121,6 +121,34 @@ bool cursor_move_end(Cursor *cursor, const Document *document);
 bool cursor_move_up(Cursor *cursor, const Document *document);
 
 /*
+ * Move the cursor up by a page-sized number of logical lines.
+ *
+ * Parameters:
+ *   cursor    - the cursor to move.
+ *   document  - the document the cursor refers to.
+ *   page_rows - the number of document rows in one visible page; must be > 0.
+ *
+ * Returns:
+ *   true if the cursor position changed, false for invalid arguments or when
+ *   the cursor is already at the top boundary.
+ */
+bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_rows);
+
+/*
+ * Move the cursor down by a page-sized number of logical lines.
+ *
+ * Parameters:
+ *   cursor    - the cursor to move.
+ *   document  - the document the cursor refers to.
+ *   page_rows - the number of document rows in one visible page; must be > 0.
+ *
+ * Returns:
+ *   true if the cursor position changed, false for invalid arguments or when
+ *   the cursor is already at the bottom boundary.
+ */
+bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page_rows);
+
+/*
  * Move the cursor down one line, keeping the preferred column when possible.
  *
  * Parameters:

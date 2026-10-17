@@ -617,6 +617,12 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
     case EDITOR_COMMAND_MOVE_DOWN:
         changed = cursor_move_down(&state->cursor, &state->document);
         break;
+    case EDITOR_COMMAND_PAGE_UP:
+        changed = cursor_move_page_up(&state->cursor, &state->document, command->page_rows);
+        break;
+    case EDITOR_COMMAND_PAGE_DOWN:
+        changed = cursor_move_page_down(&state->cursor, &state->document, command->page_rows);
+        break;
     case EDITOR_COMMAND_MOVE_HOME:
         changed = cursor_move_home(&state->cursor);
         break;

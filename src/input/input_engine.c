@@ -15,6 +15,7 @@ static void command_set(EditorCommand *command, EditorCommandType type, uint32_t
 {
     command->type = type;
     command->character = character;
+    command->page_rows = 0;
 }
 
 /*
@@ -82,7 +83,11 @@ bool input_engine_translate(const InputEvent *event, EditorCommand *command)
         command_set(command, EDITOR_COMMAND_MOVE_END, 0);
         break;
     case INPUT_EVENT_PAGE_UP:
+        command_set(command, EDITOR_COMMAND_PAGE_UP, 0);
+        break;
     case INPUT_EVENT_PAGE_DOWN:
+        command_set(command, EDITOR_COMMAND_PAGE_DOWN, 0);
+        break;
     case INPUT_EVENT_TAB:
         break;
     case INPUT_EVENT_DELETE:

@@ -15,6 +15,7 @@ static void feed_and_execute(InputParser *parser, EditorState *state, unsigned c
 
     assert(input_parser_feed(parser, byte, &event));
     assert(input_engine_translate(&event, &command));
+    command.page_rows = 3;
     assert(command_engine_execute(state, &command, NULL, redraw, should_quit));
 }
 
@@ -107,8 +108,47 @@ static void test_end_to_end_input_pipeline(void)
     editor_state_destroy(&state);
 }
 
+static void test_page_navigation_pipeline(void)
+{
+    InputParser parser;
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+
+    assert(editor_state_init(&state));
+    input_parser_init(&parser);
+
+    for (size_t row = 0; row < 8; row++)
+    {
+        feed_and_execute(&parser, &state, 'x', &redraw, &should_quit);
+        if (row + 1 < 8)
+        {
+            feed_and_execute(&parser, &state, '\r', &redraw, &should_quit);
+        }
+    }
+    assert(state.cursor.row == 7 && state.cursor.column == 1);
+    state.is_dirty = false;
+
+    feed_and_execute(&parser, &state, 0x1B, &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '[', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '5', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '~', &redraw, &should_quit);
+    assert(redraw && !should_quit && state.cursor.row == 4);
+    assert(state.cursor.column == 1 && !state.is_dirty);
+
+    feed_and_execute(&parser, &state, 0x1B, &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '[', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '6', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '~', &redraw, &should_quit);
+    assert(redraw && !should_quit && state.cursor.row == 7);
+    assert(state.cursor.column == 1 && !state.is_dirty);
+
+    editor_state_destroy(&state);
+}
+
 int main(void)
 {
     test_end_to_end_input_pipeline();
+    test_page_navigation_pipeline();
     return 0;
 }

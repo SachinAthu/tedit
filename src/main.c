@@ -215,6 +215,9 @@ static bool application_event_loop(EditorState *state, Renderer *renderer, const
         {
             return false;
         }
+
+        command.page_rows = renderer->document_rows;
+
         if (!command_engine_execute(state, &command, save_path, &redraw, &should_quit))
         {
             return false;

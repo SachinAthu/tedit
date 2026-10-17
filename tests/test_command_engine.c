@@ -12,7 +12,7 @@
 static void execute(EditorState *state, EditorCommandType type, uint32_t character,
                     bool *redraw, bool *should_quit)
 {
-    EditorCommand command = {type, character};
+    EditorCommand command = {type, character, 3};
     assert(command_engine_execute(state, &command, NULL, redraw, should_quit));
 }
 
@@ -61,6 +61,62 @@ static void test_home_and_end_commands(void)
     execute(&state, EDITOR_COMMAND_MOVE_END, 0, &redraw, &should_quit);
     assert(!redraw && state.cursor.column == 3);
     assert(state.is_dirty);
+
+    editor_state_destroy(&state);
+}
+
+static void test_page_navigation_commands(void)
+{
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+
+    assert(editor_state_init(&state));
+
+    /* Build eight logical lines, each with four code points. */
+    for (size_t row = 0; row < 8; row++)
+    {
+        for (size_t column = 0; column < 4; column++)
+        {
+            execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, (uint32_t)('a' + column),
+                    &redraw, &should_quit);
+        }
+        if (row + 1 < 8)
+        {
+            execute(&state, EDITOR_COMMAND_INSERT_NEWLINE, 0, &redraw, &should_quit);
+        }
+    }
+
+    assert(state.cursor.row == 7 && state.cursor.column == 4);
+
+    /* Make one destination line shorter to verify preferred-column recovery. */
+    assert(document_delete_character(&state.document, 4, 1));
+    assert(document_delete_character(&state.document, 4, 1));
+    assert(document_delete_character(&state.document, 4, 1));
+    state.is_dirty = false;
+
+    execute(&state, EDITOR_COMMAND_PAGE_UP, 0, &redraw, &should_quit);
+    assert(redraw && !should_quit);
+    assert(state.cursor.row == 4 && state.cursor.column == 1);
+    assert(state.cursor.preferred_column == 4);
+    assert(!state.is_dirty);
+
+    execute(&state, EDITOR_COMMAND_PAGE_UP, 0, &redraw, &should_quit);
+    assert(redraw && state.cursor.row == 1 && state.cursor.column == 4);
+    execute(&state, EDITOR_COMMAND_PAGE_UP, 0, &redraw, &should_quit);
+    assert(redraw && state.cursor.row == 0 && state.cursor.column == 4);
+    execute(&state, EDITOR_COMMAND_PAGE_UP, 0, &redraw, &should_quit);
+    assert(!redraw && state.cursor.row == 0);
+
+    execute(&state, EDITOR_COMMAND_PAGE_DOWN, 0, &redraw, &should_quit);
+    assert(redraw && state.cursor.row == 3 && state.cursor.column == 4);
+    execute(&state, EDITOR_COMMAND_PAGE_DOWN, 0, &redraw, &should_quit);
+    assert(redraw && state.cursor.row == 6 && state.cursor.column == 4);
+    execute(&state, EDITOR_COMMAND_PAGE_DOWN, 0, &redraw, &should_quit);
+    assert(redraw && state.cursor.row == 7 && state.cursor.column == 4);
+    execute(&state, EDITOR_COMMAND_PAGE_DOWN, 0, &redraw, &should_quit);
+    assert(!redraw && state.cursor.row == 7);
+    assert(!state.is_dirty);
 
     editor_state_destroy(&state);
 }
@@ -243,7 +299,7 @@ static void test_dirty_quit_saves_unnamed_document(void)
 static void test_invalid_arguments(void)
 {
     EditorState state;
-    EditorCommand command = {EDITOR_COMMAND_NONE, 0};
+    EditorCommand command = {EDITOR_COMMAND_NONE, 0, 0};
     bool redraw;
     bool should_quit;
 
@@ -384,6 +440,7 @@ int main(void)
 {
     test_editing_commands();
     test_home_and_end_commands();
+    test_page_navigation_commands();
     test_document_delete_command();
     test_quit_and_noop();
     test_invalid_arguments();

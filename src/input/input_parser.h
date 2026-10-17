@@ -24,12 +24,12 @@ typedef enum
     INPUT_EVENT_ARROW_RIGHT,
     INPUT_EVENT_ARROW_UP,
     INPUT_EVENT_ARROW_DOWN,
-    INPUT_EVENT_DELETE,
     INPUT_EVENT_HOME,
     INPUT_EVENT_END,
     INPUT_EVENT_PAGE_UP,
     INPUT_EVENT_PAGE_DOWN,
-    INPUT_EVENT_TAB
+    INPUT_EVENT_TAB,
+    INPUT_EVENT_DELETE
 } InputEventType;
 
 /*
@@ -55,7 +55,7 @@ typedef struct
  *   ESCAPE        - saw ESC; waiting to learn whether it is a lone Escape
  *                   key or the start of a sequence.
  *   CSI           - saw ESC '['; waiting for the final byte that names the
- *                   key (A, B, C, D, or a '~'-terminated sequence).
+ *                   key (A, B, C, D, H, F, or a '~'-terminated sequence).
  *   CSI_PARAMETER - inside the numeric parameter of a sequence such as
  *                   "3~" (Delete).
  */

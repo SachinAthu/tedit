@@ -22,6 +22,8 @@ typedef enum
     EDITOR_COMMAND_MOVE_RIGHT,
     EDITOR_COMMAND_MOVE_UP,
     EDITOR_COMMAND_MOVE_DOWN,
+    EDITOR_COMMAND_PAGE_UP,
+    EDITOR_COMMAND_PAGE_DOWN,
     EDITOR_COMMAND_MOVE_HOME,
     EDITOR_COMMAND_MOVE_END,
     EDITOR_COMMAND_DELETE_CHARACTER,
@@ -34,11 +36,13 @@ typedef enum
  *
  * `character` holds the Unicode scalar only for
  * EDITOR_COMMAND_INSERT_CHARACTER; for every other command it is unused (0).
+ * `page_rows` is the visible document height for page-navigation commands.
  */
 typedef struct
 {
     EditorCommandType type;
     uint32_t character;
+    size_t page_rows;
 } EditorCommand;
 
 /*

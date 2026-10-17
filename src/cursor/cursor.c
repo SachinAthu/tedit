@@ -280,3 +280,73 @@ bool cursor_move_down(Cursor *cursor, const Document *document)
 
     return cursor_move_vertical(cursor, document, cursor->row + 1);
 }
+
+/*
+ * Move the cursor upward by one visible page while preserving its preferred
+ * logical column.
+ *
+ * Parameters:
+ *   cursor    - the cursor to move.
+ *   document  - the document the cursor refers to.
+ *   page_rows - the number of document rows in one visible page.
+ *
+ * Returns:
+ *   true if the cursor position changed, false for invalid arguments or if
+ *   the cursor is already at the first row.
+ */
+bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_rows)
+{
+    size_t target_row;
+
+    if (cursor == NULL || document == NULL || page_rows == 0 ||
+        cursor->row >= document->line_count || cursor->row == 0)
+    {
+        return false;
+    }
+
+    target_row = cursor->row > page_rows ? cursor->row - page_rows : 0;
+    if (target_row == cursor->row)
+    {
+        return false;
+    }
+
+    return cursor_move_vertical(cursor, document, target_row);
+}
+
+/*
+ * Move the cursor downward by one visible page while preserving its preferred
+ * logical column.
+ *
+ * Parameters:
+ *   cursor    - the cursor to move.
+ *   document  - the document the cursor refers to.
+ *   page_rows - the number of document rows in one visible page.
+ *
+ * Returns:
+ *   true if the cursor position changed, false for invalid arguments or if
+ *   the cursor is already at the last row.
+ */
+bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page_rows)
+{
+    size_t remaining_rows;
+    size_t target_row;
+
+    if (cursor == NULL || document == NULL || page_rows == 0 ||
+        cursor->row >= document->line_count ||
+        cursor->row + 1 >= document->line_count)
+    {
+        return false;
+    }
+
+    remaining_rows = document->line_count - 1 - cursor->row;
+    if (page_rows >= remaining_rows)
+    {
+        target_row = document->line_count - 1;
+    }
+    else
+    {
+        target_row = cursor->row + page_rows;
+    }
+
+    return cursor_move_vertical(cursor, document, target_row);
+}

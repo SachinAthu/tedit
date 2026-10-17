@@ -29,15 +29,15 @@ static void test_all_supported_mappings(void)
     assert_mapping(INPUT_EVENT_HOME, 0, EDITOR_COMMAND_MOVE_HOME, 0);
     assert_mapping(INPUT_EVENT_END, 0, EDITOR_COMMAND_MOVE_END, 0);
     assert_mapping(INPUT_EVENT_TAB, 0, EDITOR_COMMAND_NONE, 0);
-    assert_mapping(INPUT_EVENT_PAGE_UP, 0, EDITOR_COMMAND_NONE, 0);
-    assert_mapping(INPUT_EVENT_PAGE_DOWN, 0, EDITOR_COMMAND_NONE, 0);
+    assert_mapping(INPUT_EVENT_PAGE_UP, 0, EDITOR_COMMAND_PAGE_UP, 0);
+    assert_mapping(INPUT_EVENT_PAGE_DOWN, 0, EDITOR_COMMAND_PAGE_DOWN, 0);
     assert_mapping(INPUT_EVENT_DELETE, 0, EDITOR_COMMAND_DELETE_CHARACTER, 0);
 }
 
 static void test_invalid_arguments_and_unknown_event(void)
 {
     InputEvent event = {INPUT_EVENT_NONE, 0};
-    EditorCommand command = {EDITOR_COMMAND_QUIT, 123};
+    EditorCommand command = {EDITOR_COMMAND_QUIT, 123, 0};
 
     assert(!input_engine_translate(NULL, &command));
     assert(!input_engine_translate(&event, NULL));
