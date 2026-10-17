@@ -66,6 +66,18 @@ static void test_end_to_end_input_pipeline(void)
     feed_and_execute(&parser, &state, 'F', &redraw, &should_quit);
     assert(redraw && state.cursor.column == 1);
 
+    /* Delete removes the code point at the Cursor through the full pipeline. */
+    feed_and_execute(&parser, &state, 0x1B, &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '[', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, 'H', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, 0x1B, &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '[', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '3', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '~', &redraw, &should_quit);
+    line = document_get_line(&state.document, 0);
+    assert(redraw && line != NULL && line->length == 0);
+    assert(state.cursor.row == 0 && state.cursor.column == 0 && state.is_dirty);
+
     /* Save without an associated path starts filename entry. */
     feed_and_execute(&parser, &state, 0x13, &redraw, &should_quit);
     assert(redraw && !should_quit);

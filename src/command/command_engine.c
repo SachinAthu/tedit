@@ -78,6 +78,53 @@ static bool command_backspace(EditorState *state, bool *changed)
 }
 
 /*
+ * Perform a Delete edit in the document.
+ *
+ * Deletes the code point at the Cursor, or merges the current line with the
+ * following line when the Cursor is at the current line's end. At the end of
+ * the final line, the command is a no-op.
+ *
+ * `changed` is set only when the Document is modified successfully.
+ */
+static bool command_delete_character(EditorState *state, bool *changed)
+{
+    const DocumentLine *line = document_get_line(&state->document, state->cursor.row);
+
+    if (line == NULL)
+    {
+        return true;
+    }
+
+    if (state->cursor.column < line->length)
+    {
+        if (!document_delete_character(&state->document, state->cursor.row, state->cursor.column))
+        {
+            return true;
+        }
+    }
+    else if (state->cursor.row + 1 < state->document.line_count)
+    {
+        if (!document_merge_lines(&state->document, state->cursor.row))
+        {
+            return true;
+        }
+    }
+    else
+    {
+        return true;
+    }
+
+    if (!cursor_set_position(&state->cursor, &state->document, state->cursor.row, state->cursor.column))
+    {
+        return false;
+    }
+
+    state->is_dirty = true;
+    *changed = true;
+    return true;
+}
+
+/*
  * Encode one Unicode scalar as UTF-8.
  *
  * Parameters:
@@ -577,8 +624,10 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
         changed = cursor_move_end(&state->cursor, &state->document);
         break;
     case EDITOR_COMMAND_DELETE_CHARACTER:
-        /* Delete currently edits only the filename-entry prompt; deleting
-         * inside the document itself is deferred, so nothing happens here. */
+        if (!command_delete_character(state, &changed))
+        {
+            return false;
+        }
         break;
     default:
         return false;

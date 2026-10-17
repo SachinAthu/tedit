@@ -65,6 +65,55 @@ static void test_home_and_end_commands(void)
     editor_state_destroy(&state);
 }
 
+static void test_document_delete_command(void)
+{
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+    const DocumentLine *line;
+
+    assert(editor_state_init(&state));
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'a', &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 0x20AC, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'c', &redraw, &should_quit);
+    assert(state.cursor.column == 3 && state.is_dirty);
+
+    state.is_dirty = false;
+    execute(&state, EDITOR_COMMAND_MOVE_HOME, 0, &redraw, &should_quit);
+    assert(redraw && !state.is_dirty);
+    execute(&state, EDITOR_COMMAND_DELETE_CHARACTER, 0, &redraw, &should_quit);
+    line = document_get_line(&state.document, 0);
+    assert(redraw && !should_quit && state.is_dirty);
+    assert(line != NULL && line->length == 2);
+    assert(line->data[0] == 0x20AC && line->data[1] == 'c');
+    assert(state.cursor.row == 0 && state.cursor.column == 0);
+
+    state.is_dirty = false;
+    execute(&state, EDITOR_COMMAND_MOVE_END, 0, &redraw, &should_quit);
+    assert(redraw && !state.is_dirty);
+    execute(&state, EDITOR_COMMAND_INSERT_NEWLINE, 0, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'z', &redraw, &should_quit);
+    state.is_dirty = false;
+    execute(&state, EDITOR_COMMAND_MOVE_HOME, 0, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_MOVE_UP, 0, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_MOVE_END, 0, &redraw, &should_quit);
+    assert(state.cursor.row == 0 && state.cursor.column == 2);
+
+    execute(&state, EDITOR_COMMAND_DELETE_CHARACTER, 0, &redraw, &should_quit);
+    assert(redraw && state.is_dirty && state.document.line_count == 1);
+    line = document_get_line(&state.document, 0);
+    assert(line != NULL && line->length == 3);
+    assert(line->data[0] == 0x20AC && line->data[1] == 'c' && line->data[2] == 'z');
+    assert(state.cursor.row == 0 && state.cursor.column == 2);
+
+    state.is_dirty = false;
+    execute(&state, EDITOR_COMMAND_MOVE_END, 0, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_DELETE_CHARACTER, 0, &redraw, &should_quit);
+    assert(!redraw && !state.is_dirty && state.document.line_count == 1);
+
+    editor_state_destroy(&state);
+}
+
 static void test_quit_and_noop(void)
 {
     EditorState state;
@@ -335,6 +384,7 @@ int main(void)
 {
     test_editing_commands();
     test_home_and_end_commands();
+    test_document_delete_command();
     test_quit_and_noop();
     test_invalid_arguments();
     test_save_as_success_and_backspace();
