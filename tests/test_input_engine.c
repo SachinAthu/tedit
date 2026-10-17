@@ -26,6 +26,11 @@ static void test_all_supported_mappings(void)
     assert_mapping(INPUT_EVENT_ARROW_RIGHT, 0, EDITOR_COMMAND_MOVE_RIGHT, 0);
     assert_mapping(INPUT_EVENT_ARROW_UP, 0, EDITOR_COMMAND_MOVE_UP, 0);
     assert_mapping(INPUT_EVENT_ARROW_DOWN, 0, EDITOR_COMMAND_MOVE_DOWN, 0);
+    assert_mapping(INPUT_EVENT_HOME, 0, EDITOR_COMMAND_MOVE_HOME, 0);
+    assert_mapping(INPUT_EVENT_END, 0, EDITOR_COMMAND_MOVE_END, 0);
+    assert_mapping(INPUT_EVENT_TAB, 0, EDITOR_COMMAND_NONE, 0);
+    assert_mapping(INPUT_EVENT_PAGE_UP, 0, EDITOR_COMMAND_NONE, 0);
+    assert_mapping(INPUT_EVENT_PAGE_DOWN, 0, EDITOR_COMMAND_NONE, 0);
     assert_mapping(INPUT_EVENT_DELETE, 0, EDITOR_COMMAND_DELETE_CHARACTER, 0);
 }
 

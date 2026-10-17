@@ -146,6 +146,58 @@ bool cursor_move_right(Cursor *cursor, const Document *document)
 }
 
 /*
+ * Move the cursor to the beginning of its current logical line.
+ *
+ * Parameters:
+ *   cursor - the cursor to move.
+ *
+ * Returns:
+ *   true if the cursor moved, false when cursor is NULL or already at column 0.
+ */
+bool cursor_move_home(Cursor *cursor)
+{
+    if (cursor == NULL || cursor->column == 0)
+    {
+        return false;
+    }
+
+    cursor->column = 0;
+    cursor->preferred_column = 0;
+    return true;
+}
+
+/*
+ * Move the cursor to the end of its current logical line.
+ *
+ * Parameters:
+ *   cursor   - the cursor to move.
+ *   document - the document the cursor refers to.
+ *
+ * Returns:
+ *   true if the cursor moved, false for invalid arguments or when already at
+ *   the end of the current line.
+ */
+bool cursor_move_end(Cursor *cursor, const Document *document)
+{
+    const DocumentLine *line;
+
+    if (cursor == NULL || document == NULL || cursor->row >= document->line_count)
+    {
+        return false;
+    }
+
+    line = &document->lines[cursor->row];
+    if (cursor->column == line->length)
+    {
+        return false;
+    }
+
+    cursor->column = line->length;
+    cursor->preferred_column = cursor->column;
+    return true;
+}
+
+/*
  * Move the cursor to another line while preserving its preferred column.
  *
  * This is shared by cursor_move_up() and cursor_move_down(). It moves to

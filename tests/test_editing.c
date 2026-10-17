@@ -90,6 +90,37 @@ static void test_cursor_horizontal_movement(void)
     document_destroy(&document);
 }
 
+/* Home and End move within logical code-point columns on the current line. */
+static void test_cursor_home_and_end(void)
+{
+    Document document;
+    Cursor cursor;
+
+    assert(document_init(&document));
+    assert(document_insert_character(&document, 0, 0, 'a'));
+    assert(document_insert_character(&document, 0, 1, 0x20AC));
+    assert(document_insert_character(&document, 0, 2, 'z'));
+    assert(document_split_line(&document, 0, 3));
+
+    cursor_init(&cursor);
+    assert(cursor_set_position(&cursor, &document, 0, 2));
+    assert(cursor_move_home(&cursor));
+    assert(cursor.row == 0 && cursor.column == 0 && cursor.preferred_column == 0);
+    assert(!cursor_move_home(&cursor));
+
+    assert(cursor_move_end(&cursor, &document));
+    assert(cursor.row == 0 && cursor.column == 3 && cursor.preferred_column == 3);
+    assert(!cursor_move_end(&cursor, &document));
+
+    assert(cursor_set_position(&cursor, &document, 1, 0));
+    assert(!cursor_move_end(&cursor, &document));
+    assert(!cursor_move_end(NULL, &document));
+    assert(!cursor_move_end(&cursor, NULL));
+    assert(!cursor_move_home(NULL));
+
+    document_destroy(&document);
+}
+
 /* Moving up/down keeps the preferred column across lines of uneven length. */
 static void test_cursor_vertical_movement_preserves_preferred_column(void)
 {
@@ -403,7 +434,6 @@ static void test_renderer_uses_viewport_offsets(void)
     renderer_destroy(&renderer);
     editor_state_destroy(&state);
 }
-
 
 /* The final row is the Status Bar and reports name, dirty state, and position. */
 static void test_renderer_draws_status_bar(void)
@@ -768,6 +798,7 @@ int main(void)
 {
     test_document_insert_and_delete();
     test_cursor_horizontal_movement();
+    test_cursor_home_and_end();
     test_cursor_vertical_movement_preserves_preferred_column();
     test_horizontal_movement_resets_preferred_column();
     test_dirty_flag_initial_state();

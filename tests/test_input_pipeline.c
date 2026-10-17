@@ -52,6 +52,20 @@ static void test_end_to_end_input_pipeline(void)
     assert(redraw && !should_quit);
     assert(state.cursor.column == 0);
 
+    /* Home and End terminal sequences reach document navigation commands. */
+    feed_and_execute(&parser, &state, 0x1B, &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '[', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, 'C', &redraw, &should_quit);
+    assert(redraw && state.cursor.column == 1);
+    feed_and_execute(&parser, &state, 0x1B, &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '[', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, 'H', &redraw, &should_quit);
+    assert(redraw && state.cursor.column == 0);
+    feed_and_execute(&parser, &state, 0x1B, &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '[', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, 'F', &redraw, &should_quit);
+    assert(redraw && state.cursor.column == 1);
+
     /* Save without an associated path starts filename entry. */
     feed_and_execute(&parser, &state, 0x13, &redraw, &should_quit);
     assert(redraw && !should_quit);

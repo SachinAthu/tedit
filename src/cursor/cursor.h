@@ -85,6 +85,30 @@ bool cursor_move_left(Cursor *cursor);
 bool cursor_move_right(Cursor *cursor, const Document *document);
 
 /*
+ * Move the cursor to the beginning of its current logical line.
+ *
+ * Parameters:
+ *   cursor - the cursor to move.
+ *
+ * Returns:
+ *   true if the cursor moved, false when cursor is NULL or already at column 0.
+ */
+bool cursor_move_home(Cursor *cursor);
+
+/*
+ * Move the cursor to the end of its current logical line.
+ *
+ * Parameters:
+ *   cursor   - the cursor to move.
+ *   document - the document the cursor refers to.
+ *
+ * Returns:
+ *   true if the cursor moved, false for invalid arguments or when already at
+ *   the end of the current line.
+ */
+bool cursor_move_end(Cursor *cursor, const Document *document);
+
+/*
  * Move the cursor up one line, keeping the preferred column when possible.
  *
  * Parameters:

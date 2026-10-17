@@ -18,6 +18,7 @@
 #define INPUT_BACKSPACE_ALT 0x08
 #define INPUT_ESCAPE 0x1B
 #define INPUT_ENTER 0x0D
+#define INPUT_TAB 0x09
 #define INPUT_LINE_FEED 0x0A
 #define UTF8_CONTINUATION_MASK 0xC0
 #define UTF8_CONTINUATION_PREFIX 0x80
@@ -187,6 +188,10 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
         {
             event->type = INPUT_EVENT_ENTER;
         }
+        else if (byte == INPUT_TAB)
+        {
+            event->type = INPUT_EVENT_TAB;
+        }
         else if (byte >= 0x20 && byte <= 0x7E)
         {
             event->type = INPUT_EVENT_CHARACTER;
@@ -230,9 +235,28 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
             return true;
         }
 
-        if (byte == '~' && parser->csi_parameter == 3)
+        if (byte == '~')
         {
-            event->type = INPUT_EVENT_DELETE;
+            if (parser->csi_parameter == 1 || parser->csi_parameter == 7)
+            {
+                event->type = INPUT_EVENT_HOME;
+            }
+            else if (parser->csi_parameter == 4 || parser->csi_parameter == 8)
+            {
+                event->type = INPUT_EVENT_END;
+            }
+            else if (parser->csi_parameter == 3)
+            {
+                event->type = INPUT_EVENT_DELETE;
+            }
+            else if (parser->csi_parameter == 5)
+            {
+                event->type = INPUT_EVENT_PAGE_UP;
+            }
+            else if (parser->csi_parameter == 6)
+            {
+                event->type = INPUT_EVENT_PAGE_DOWN;
+            }
         }
         parser->state = INPUT_PARSER_NORMAL;
         parser->csi_parameter = 0;
@@ -252,6 +276,14 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
     if (byte == 'D')
     {
         event->type = INPUT_EVENT_ARROW_LEFT;
+    }
+    else if (byte == 'H')
+    {
+        event->type = INPUT_EVENT_HOME;
+    }
+    else if (byte == 'F')
+    {
+        event->type = INPUT_EVENT_END;
     }
     else if (byte == 'C')
     {

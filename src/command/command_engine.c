@@ -570,6 +570,12 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
     case EDITOR_COMMAND_MOVE_DOWN:
         changed = cursor_move_down(&state->cursor, &state->document);
         break;
+    case EDITOR_COMMAND_MOVE_HOME:
+        changed = cursor_move_home(&state->cursor);
+        break;
+    case EDITOR_COMMAND_MOVE_END:
+        changed = cursor_move_end(&state->cursor, &state->document);
+        break;
     case EDITOR_COMMAND_DELETE_CHARACTER:
         /* Delete currently edits only the filename-entry prompt; deleting
          * inside the document itself is deferred, so nothing happens here. */

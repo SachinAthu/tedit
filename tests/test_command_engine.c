@@ -39,6 +39,32 @@ static void test_editing_commands(void)
     editor_state_destroy(&state);
 }
 
+static void test_home_and_end_commands(void)
+{
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+
+    assert(editor_state_init(&state));
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'a', &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'b', &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'c', &redraw, &should_quit);
+    assert(state.cursor.column == 3);
+
+    execute(&state, EDITOR_COMMAND_MOVE_HOME, 0, &redraw, &should_quit);
+    assert(redraw && !should_quit && state.cursor.row == 0 && state.cursor.column == 0);
+    execute(&state, EDITOR_COMMAND_MOVE_HOME, 0, &redraw, &should_quit);
+    assert(!redraw && state.cursor.column == 0);
+
+    execute(&state, EDITOR_COMMAND_MOVE_END, 0, &redraw, &should_quit);
+    assert(redraw && !should_quit && state.cursor.column == 3);
+    execute(&state, EDITOR_COMMAND_MOVE_END, 0, &redraw, &should_quit);
+    assert(!redraw && state.cursor.column == 3);
+    assert(state.is_dirty);
+
+    editor_state_destroy(&state);
+}
+
 static void test_quit_and_noop(void)
 {
     EditorState state;
@@ -52,7 +78,6 @@ static void test_quit_and_noop(void)
     assert(!redraw && should_quit);
     editor_state_destroy(&state);
 }
-
 
 static void test_filename_entry_cursor_editing(void)
 {
@@ -181,7 +206,6 @@ static void test_invalid_arguments(void)
     editor_state_destroy(&state);
 }
 
-
 static void test_save_as_success_and_backspace(void)
 {
     char path[] = "/tmp/tedit-save-as-XXXXXX";
@@ -271,7 +295,6 @@ static void test_save_as_failure_and_cancel_preserve_document(void)
     assert(rmdir(invalid_path) == 0);
 }
 
-
 static void test_dirty_quit_saves_named_document(void)
 {
     char path[] = "/tmp/tedit-quit-named-XXXXXX";
@@ -311,6 +334,7 @@ static void test_dirty_quit_saves_named_document(void)
 int main(void)
 {
     test_editing_commands();
+    test_home_and_end_commands();
     test_quit_and_noop();
     test_invalid_arguments();
     test_save_as_success_and_backspace();
