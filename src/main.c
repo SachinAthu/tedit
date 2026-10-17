@@ -99,10 +99,12 @@ static bool redraw_after_action(Renderer *renderer, EditorState *state)
         return false;
     }
 
-    if (!viewport_ensure_cursor_visible(
+    size_t cursor_visual_column;
+    if (!renderer_cursor_visual_column(state, &cursor_visual_column) ||
+        !viewport_ensure_cursor_visible(
             &state->viewport,
             state->cursor.row,
-            state->cursor.column,
+            cursor_visual_column,
             renderer->document_rows,
             renderer->screen_buffer.columns))
     {

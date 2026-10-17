@@ -44,6 +44,8 @@ static size_t renderer_utf8_length(uint32_t code_point);
 
 static size_t renderer_encode_utf8(uint32_t code_point, char output[4]);
 
+static size_t renderer_tab_advance(size_t visual_column, size_t tab_width);
+
 /*
  * Prepare a Renderer object for use.
  *
@@ -112,6 +114,53 @@ void renderer_destroy(Renderer *renderer)
     renderer->output_capacity = 0;
 }
 
+bool renderer_cursor_visual_column(const EditorState *state, size_t *visual_column)
+{
+    const DocumentLine *line;
+    size_t column = 0;
+
+    if (state == NULL || visual_column == NULL || state->configuration.tab_width == 0)
+    {
+        return false;
+    }
+
+    if (state->document.line_count == 0)
+    {
+        if (state->cursor.row != 0 || state->cursor.column != 0)
+        {
+            return false;
+        }
+        *visual_column = 0;
+        return true;
+    }
+    if (state->cursor.row >= state->document.line_count)
+    {
+        return false;
+    }
+
+    line = &state->document.lines[state->cursor.row];
+
+    if (state->cursor.column > line->length)
+    {
+        return false;
+    }
+
+    for (size_t index = 0; index < state->cursor.column; ++index)
+    {
+        size_t advance = line->data[index] == (uint32_t)'\t'
+                             ? renderer_tab_advance(column, state->configuration.tab_width)
+                             : 1;
+        if (column > SIZE_MAX - advance)
+        {
+            return false;
+        }
+        column += advance;
+    }
+
+    *visual_column = column;
+    return true;
+}
+
 /*
  * Draw one complete frame of the editor.
  *
@@ -141,13 +190,17 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
     {
         return false;
     }
-    if (!state->filename_entry_active &&
-        (state->cursor.row < state->viewport.viewport_row ||
-         state->cursor.column < state->viewport.viewport_column ||
-         state->cursor.row - state->viewport.viewport_row >= renderer->document_rows ||
-         state->cursor.column - state->viewport.viewport_column >= renderer->screen_buffer.columns))
+    if (!state->filename_entry_active)
     {
-        return false;
+        size_t cursor_visual_column;
+        if (!renderer_cursor_visual_column(state, &cursor_visual_column) ||
+            state->cursor.row < state->viewport.viewport_row ||
+            cursor_visual_column < state->viewport.viewport_column ||
+            state->cursor.row - state->viewport.viewport_row >= renderer->document_rows ||
+            cursor_visual_column - state->viewport.viewport_column >= renderer->screen_buffer.columns)
+        {
+            return false;
+        }
     }
 
     if (!renderer_build_frame(renderer, state))
@@ -180,10 +233,12 @@ bool renderer_render(Renderer *renderer, const EditorState *state)
         }
         else
         {
-            success = renderer_write_all("\x1b[0m", 4) &&
+            size_t cursor_visual_column;
+            success = renderer_cursor_visual_column(state, &cursor_visual_column) &&
+                      renderer_write_all("\x1b[0m", 4) &&
                       renderer_write_cursor_position(
                           state->cursor.row - state->viewport.viewport_row,
-                          state->cursor.column - state->viewport.viewport_column);
+                          cursor_visual_column - state->viewport.viewport_column);
         }
     }
 
@@ -249,19 +304,51 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
 
         line = &state->document.lines[document_row];
 
-        /* Horizontal scrolling maps screen columns to document columns. */
-        for (size_t screen_column = 0; screen_column < renderer->screen_buffer.columns; screen_column++)
+        /* Expand logical characters into visual cells before horizontal clipping. */
+        size_t visual_column = 0;
+        for (size_t document_column = 0; document_column < line->length; ++document_column)
         {
-            const size_t document_column = state->viewport.viewport_column + screen_column;
+            const uint32_t code_point = line->data[document_column];
+            const size_t advance = code_point == (uint32_t)'\t'
+                                       ? renderer_tab_advance(visual_column, state->configuration.tab_width)
+                                       : 1;
 
-            if (document_column >= line->length)
+            if (code_point == (uint32_t)'\t')
             {
-                break;
+                for (size_t offset = 0; offset < advance; ++offset)
+                {
+                    const size_t cell_column = visual_column + offset;
+                    if (cell_column >= state->viewport.viewport_column &&
+                        cell_column - state->viewport.viewport_column < renderer->screen_buffer.columns)
+                    {
+                        if (!screen_buffer_set(&renderer->screen_buffer, screen_row,
+                                               cell_column - state->viewport.viewport_column,
+                                               (uint32_t)' '))
+                        {
+                            return false;
+                        }
+                    }
+                }
+            }
+            else if (visual_column >= state->viewport.viewport_column &&
+                     visual_column - state->viewport.viewport_column < renderer->screen_buffer.columns)
+            {
+                if (!screen_buffer_set(&renderer->screen_buffer, screen_row,
+                                       visual_column - state->viewport.viewport_column, code_point))
+                {
+                    return false;
+                }
             }
 
-            if (!screen_buffer_set(&renderer->screen_buffer, screen_row, screen_column, line->data[document_column]))
+            if (visual_column > SIZE_MAX - advance)
             {
                 return false;
+            }
+            visual_column += advance;
+            if (visual_column >= state->viewport.viewport_column &&
+                visual_column - state->viewport.viewport_column >= renderer->screen_buffer.columns)
+            {
+                break;
             }
         }
     }
@@ -887,4 +974,9 @@ static size_t renderer_encode_utf8(uint32_t code_point, char output[4])
     }
 
     return length;
+}
+
+static size_t renderer_tab_advance(size_t visual_column, size_t tab_width)
+{
+    return tab_width - (visual_column % tab_width);
 }

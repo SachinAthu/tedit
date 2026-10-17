@@ -8,9 +8,9 @@
  * Which part of the document is currently visible on screen.
  *
  * A document can be much larger than the terminal, so the editor shows only a
- * "window" into it. `viewport_row` is the first visible line, and
- * `viewport_column` is the first visible code point within that line. Both are
- * zero-based offsets into the document.
+ * "window" into it. `viewport_row` is the first visible logical line, and
+ * `viewport_column` is the first visible visual display column after tab
+ * expansion. Both coordinates are zero-based.
  */
 typedef struct
 {

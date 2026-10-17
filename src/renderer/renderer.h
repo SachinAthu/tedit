@@ -73,4 +73,14 @@ void renderer_destroy(Renderer *renderer);
  */
 bool renderer_render(Renderer *renderer, const EditorState *state);
 
+/*
+ * Convert the current logical Cursor column to its visual display column.
+ * Tabs advance to the next configured tab stop. Other code points occupy one
+ * display cell in this milestone; Unicode display-width handling is separate.
+ *
+ * Returns true on success, false for invalid state, invalid tab width, or
+ * arithmetic overflow.
+ */
+bool renderer_cursor_visual_column(const EditorState *state, size_t *visual_column);
+
 #endif

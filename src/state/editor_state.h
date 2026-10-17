@@ -10,6 +10,12 @@
 
 #define EDITOR_MESSAGE_CAPACITY 256
 #define EDITOR_FILENAME_CAPACITY 4096
+#define DEFAULT_TAB_WIDTH 4
+
+typedef struct
+{
+    size_t tab_width;
+} EditorConfiguration;
 
 /*
  * The single source of truth for everything the editor knows.
@@ -21,6 +27,7 @@
  *   - document:               the text being edited, held in memory.
  *   - cursor:                 where the next edit happens (row, column).
  *   - viewport:               which part of the document is on screen.
+ *   - configuration:          behavior settings initialized from built-in defaults.
  *   - is_dirty:               true while the document has unsaved changes.
  *   - file_path:              path of the loaded file, or NULL for a new
  *                             untitled document.
@@ -42,6 +49,7 @@ typedef struct
     Document document;
     Cursor cursor;
     Viewport viewport;
+    EditorConfiguration configuration;
     bool is_dirty;
     char *file_path;
     char message[EDITOR_MESSAGE_CAPACITY];

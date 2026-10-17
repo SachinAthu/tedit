@@ -97,7 +97,8 @@ static bool command_delete_character(EditorState *state, bool *changed)
 
     if (state->cursor.column < line->length)
     {
-        if (!document_delete_character(&state->document, state->cursor.row, state->cursor.column))
+        if (!document_delete_character(&state->document, state->cursor.row,
+                                       state->cursor.column))
         {
             return true;
         }
@@ -114,7 +115,8 @@ static bool command_delete_character(EditorState *state, bool *changed)
         return true;
     }
 
-    if (!cursor_set_position(&state->cursor, &state->document, state->cursor.row, state->cursor.column))
+    if (!cursor_set_position(&state->cursor, &state->document,
+                             state->cursor.row, state->cursor.column))
     {
         return false;
     }
@@ -576,7 +578,12 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
     case EDITOR_COMMAND_CANCEL:
         break;
     case EDITOR_COMMAND_INSERT_CHARACTER:
-        if (!document_insert_character(&state->document, state->cursor.row, state->cursor.column, command->character))
+    case EDITOR_COMMAND_INSERT_TAB:
+    {
+        const uint32_t character = command->type == EDITOR_COMMAND_INSERT_TAB
+                                       ? (uint32_t)'\t'
+                                       : command->character;
+        if (!document_insert_character(&state->document, state->cursor.row, state->cursor.column, character))
         {
             return true;
         }
@@ -587,6 +594,7 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
         state->is_dirty = true;
         changed = true;
         break;
+    }
     case EDITOR_COMMAND_BACKSPACE:
         if (!command_backspace(state, &changed))
         {

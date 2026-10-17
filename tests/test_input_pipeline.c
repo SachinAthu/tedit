@@ -108,6 +108,27 @@ static void test_end_to_end_input_pipeline(void)
     editor_state_destroy(&state);
 }
 
+static void test_tab_insertion_pipeline(void)
+{
+    InputParser parser;
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+    const DocumentLine *line;
+
+    assert(editor_state_init(&state));
+    input_parser_init(&parser);
+    feed_and_execute(&parser, &state, 'x', &redraw, &should_quit);
+    feed_and_execute(&parser, &state, '\t', &redraw, &should_quit);
+
+    line = document_get_line(&state.document, 0);
+    assert(redraw && !should_quit && line != NULL && line->length == 2);
+    assert(line->data[0] == (uint32_t)'x' && line->data[1] == (uint32_t)'\t');
+    assert(state.cursor.column == 2 && state.is_dirty);
+
+    editor_state_destroy(&state);
+}
+
 static void test_page_navigation_pipeline(void)
 {
     InputParser parser;
@@ -146,9 +167,49 @@ static void test_page_navigation_pipeline(void)
     editor_state_destroy(&state);
 }
 
+static void test_utf8_input_and_character_boundary_editing(void)
+{
+    InputParser parser;
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+    const DocumentLine *line;
+
+    assert(editor_state_init(&state));
+    input_parser_init(&parser);
+
+    /* U+1F600 arrives as four bytes but becomes one document code point. */
+    feed_and_execute(&parser, &state, 0xF0, &redraw, &should_quit);
+    assert(!redraw && state.cursor.column == 0);
+    feed_and_execute(&parser, &state, 0x9F, &redraw, &should_quit);
+    assert(!redraw && state.cursor.column == 0);
+    feed_and_execute(&parser, &state, 0x98, &redraw, &should_quit);
+    assert(!redraw && state.cursor.column == 0);
+    feed_and_execute(&parser, &state, 0x80, &redraw, &should_quit);
+    line = document_get_line(&state.document, 0);
+    assert(redraw && state.is_dirty && line != NULL && line->length == 1);
+    assert(line->data[0] == 0x1F600 && state.cursor.column == 1);
+
+    feed_and_execute(&parser, &state, 'x', &redraw, &should_quit);
+    assert(state.cursor.column == 2);
+    feed_and_execute(&parser, &state, 0x7F, &redraw, &should_quit);
+    line = document_get_line(&state.document, 0);
+    assert(redraw && line != NULL && line->length == 1);
+    assert(line->data[0] == 0x1F600 && state.cursor.column == 1);
+
+    feed_and_execute(&parser, &state, 0x7F, &redraw, &should_quit);
+    line = document_get_line(&state.document, 0);
+    assert(redraw && line != NULL && line->length == 0);
+    assert(state.cursor.column == 0);
+
+    editor_state_destroy(&state);
+}
+
 int main(void)
 {
     test_end_to_end_input_pipeline();
     test_page_navigation_pipeline();
+    test_tab_insertion_pipeline();
+    test_utf8_input_and_character_boundary_editing();
     return 0;
 }

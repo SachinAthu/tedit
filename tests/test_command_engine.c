@@ -39,6 +39,27 @@ static void test_editing_commands(void)
     editor_state_destroy(&state);
 }
 
+static void test_tab_insertion_uses_document_code_point(void)
+{
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+    const DocumentLine *line;
+
+    assert(editor_state_init(&state));
+    assert(state.configuration.tab_width == DEFAULT_TAB_WIDTH);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, (uint32_t)'a', &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_TAB, 0, &redraw, &should_quit);
+
+    line = document_get_line(&state.document, 0);
+    assert(redraw && !should_quit && state.is_dirty);
+    assert(line != NULL && line->length == 2);
+    assert(line->data[0] == (uint32_t)'a' && line->data[1] == (uint32_t)'\t');
+    assert(state.cursor.column == 2);
+
+    editor_state_destroy(&state);
+}
+
 static void test_home_and_end_commands(void)
 {
     EditorState state;
@@ -64,6 +85,7 @@ static void test_home_and_end_commands(void)
 
     editor_state_destroy(&state);
 }
+
 
 static void test_page_navigation_commands(void)
 {
@@ -170,6 +192,36 @@ static void test_document_delete_command(void)
     editor_state_destroy(&state);
 }
 
+static void test_backspace_deletes_one_unicode_code_point(void)
+{
+    EditorState state;
+    bool redraw;
+    bool should_quit;
+    const DocumentLine *line;
+
+    assert(editor_state_init(&state));
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 0x1F600, &redraw, &should_quit);
+    execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, (uint32_t)'x', &redraw, &should_quit);
+    line = document_get_line(&state.document, 0);
+    assert(line != NULL && line->length == 2);
+    assert(line->data[0] == 0x1F600 && line->data[1] == (uint32_t)'x');
+    assert(state.cursor.column == 2);
+
+    state.is_dirty = false;
+    execute(&state, EDITOR_COMMAND_BACKSPACE, 0, &redraw, &should_quit);
+    line = document_get_line(&state.document, 0);
+    assert(redraw && state.is_dirty && line != NULL && line->length == 1);
+    assert(line->data[0] == 0x1F600 && state.cursor.column == 1);
+
+    state.is_dirty = false;
+    execute(&state, EDITOR_COMMAND_BACKSPACE, 0, &redraw, &should_quit);
+    line = document_get_line(&state.document, 0);
+    assert(redraw && state.is_dirty && line != NULL && line->length == 0);
+    assert(state.cursor.column == 0);
+
+    editor_state_destroy(&state);
+}
+
 static void test_quit_and_noop(void)
 {
     EditorState state;
@@ -183,6 +235,7 @@ static void test_quit_and_noop(void)
     assert(!redraw && should_quit);
     editor_state_destroy(&state);
 }
+
 
 static void test_filename_entry_cursor_editing(void)
 {
@@ -311,6 +364,7 @@ static void test_invalid_arguments(void)
     editor_state_destroy(&state);
 }
 
+
 static void test_save_as_success_and_backspace(void)
 {
     char path[] = "/tmp/tedit-save-as-XXXXXX";
@@ -400,6 +454,7 @@ static void test_save_as_failure_and_cancel_preserve_document(void)
     assert(rmdir(invalid_path) == 0);
 }
 
+
 static void test_dirty_quit_saves_named_document(void)
 {
     char path[] = "/tmp/tedit-quit-named-XXXXXX";
@@ -439,9 +494,11 @@ static void test_dirty_quit_saves_named_document(void)
 int main(void)
 {
     test_editing_commands();
+    test_tab_insertion_uses_document_code_point();
     test_home_and_end_commands();
     test_page_navigation_commands();
     test_document_delete_command();
+    test_backspace_deletes_one_unicode_code_point();
     test_quit_and_noop();
     test_invalid_arguments();
     test_save_as_success_and_backspace();

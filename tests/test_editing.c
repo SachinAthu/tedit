@@ -435,6 +435,58 @@ static void test_renderer_uses_viewport_offsets(void)
     editor_state_destroy(&state);
 }
 
+
+static void test_tab_width_and_visual_cursor_column(void)
+{
+    EditorState state;
+    Renderer renderer;
+    size_t visual_column;
+    const ScreenCell *cell;
+    int output_pipe[2];
+    int saved_stdout;
+    char output[4096];
+    ssize_t output_length;
+
+    assert(editor_state_init(&state));
+    assert(renderer_init(&renderer, 4, 12));
+    assert(document_insert_character(&state.document, 0, 0, (uint32_t)'a'));
+    assert(document_insert_character(&state.document, 0, 1, (uint32_t)'\t'));
+    assert(document_insert_character(&state.document, 0, 2, (uint32_t)'b'));
+    assert(cursor_set_position(&state.cursor, &state.document, 0, 2));
+
+    assert(state.configuration.tab_width == DEFAULT_TAB_WIDTH);
+    assert(renderer_cursor_visual_column(&state, &visual_column) && visual_column == 4);
+
+    state.configuration.tab_width = 8;
+    assert(renderer_cursor_visual_column(&state, &visual_column) && visual_column == 8);
+    assert(pipe(output_pipe) == 0);
+    saved_stdout = dup(STDOUT_FILENO);
+    assert(saved_stdout >= 0);
+    assert(dup2(output_pipe[1], STDOUT_FILENO) == STDOUT_FILENO);
+    close(output_pipe[1]);
+    assert(renderer_render(&renderer, &state));
+    assert(dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
+    close(saved_stdout);
+    output_length = read(output_pipe[0], output, sizeof(output) - 1);
+    assert(output_length >= 0);
+    output[output_length] = '\0';
+    close(output_pipe[0]);
+
+    cell = screen_buffer_get(&renderer.screen_buffer, 0, 0);
+    assert(cell != NULL && cell->code_point == (uint32_t)'a');
+    for (size_t column = 1; column < 8; ++column)
+    {
+        cell = screen_buffer_get(&renderer.screen_buffer, 0, column);
+        assert(cell != NULL && cell->code_point == (uint32_t)' ');
+    }
+    cell = screen_buffer_get(&renderer.screen_buffer, 0, 8);
+    assert(cell != NULL && cell->code_point == (uint32_t)'b');
+    assert(strstr(output, "\x1b[1;9H") != NULL);
+
+    renderer_destroy(&renderer);
+    editor_state_destroy(&state);
+}
+
 /* The final row is the Status Bar and reports name, dirty state, and position. */
 static void test_renderer_draws_status_bar(void)
 {
@@ -444,6 +496,11 @@ static void test_renderer_draws_status_bar(void)
     size_t status_row;
 
     assert(editor_state_init(&state));
+    assert(document_split_line(&state.document, 0, 0));
+    for (size_t index = 0; index < 4; ++index)
+    {
+        assert(document_insert_character(&state.document, 1, index, (uint32_t)'x'));
+    }
     assert(renderer_init(&renderer, 5, 40));
     state.file_path = malloc(sizeof("notes.txt"));
     assert(state.file_path != NULL);
@@ -796,6 +853,7 @@ static void test_viewport_rejects_invalid_dimensions(void)
 
 int main(void)
 {
+    test_tab_width_and_visual_cursor_column();
     test_document_insert_and_delete();
     test_cursor_horizontal_movement();
     test_cursor_home_and_end();

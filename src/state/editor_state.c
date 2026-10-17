@@ -31,6 +31,7 @@ bool editor_state_init(EditorState *state)
 
     cursor_init(&state->cursor);
     viewport_init(&state->viewport);
+    state->configuration.tab_width = DEFAULT_TAB_WIDTH;
     state->is_dirty = false;
     state->file_path = NULL;
     state->message[0] = '\0';
