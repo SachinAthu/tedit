@@ -3,11 +3,49 @@
 
 #include <wchar.h>
 
+/*
+ * Return whether `value` lies within the inclusive range [first, last].
+ *
+ * This tiny helper keeps the Unicode range tables in
+ * text_layout_code_point_width() readable: instead of spelling out
+ * `value >= 0x0300 && value <= 0x036F` many times, each entry reads as a
+ * single "is this in the range ...?" check.
+ *
+ * Parameters:
+ *   value - the value to test.
+ *   first - the lower bound of the range (inclusive).
+ *   last  - the upper bound of the range (inclusive).
+ *
+ * Returns:
+ *   true if first <= value <= last, false otherwise.
+ */
 static bool text_layout_in_range(uint32_t value, uint32_t first, uint32_t last)
 {
     return value >= first && value <= last;
 }
 
+/*
+ * Compute how many terminal columns `code_point` advances the visual cursor,
+ * writing the result through `advance`.
+ *
+ * The three cases mirror the renderer's on-screen behavior:
+ *   - a tab jumps to the next configured tab stop, which depends on the
+ *     current visual column;
+ *   - an unprintable/control character still occupies one column (it is
+ *     rendered as '?');
+ *   - a leading combining mark (a zero-width character at the very start of a
+ *     line) has nothing to combine with, so it is shown on a dotted circle
+ *     and therefore occupies one column too.
+ *
+ * Parameters:
+ *   code_point    - the Unicode scalar to measure.
+ *   visual_column - the current zero-based visual column.
+ *   tab_width     - the configured tab stop width; must be greater than 0.
+ *   advance       - out-parameter: receives the number of columns to advance.
+ *
+ * Returns:
+ *   always true; `advance` is always written.
+ */
 static bool text_layout_advance(uint32_t code_point, size_t visual_column, size_t tab_width, size_t *advance)
 {
     int width;
@@ -36,6 +74,22 @@ static bool text_layout_advance(uint32_t code_point, size_t visual_column, size_
     return true;
 }
 
+/*
+ * Return the terminal display width of one Unicode code point.
+ *
+ * The system wcwidth() is tried first; it is accurate in a UTF-8-aware
+ * locale. When it returns -1 - which it does in the POSIX/C locale, where
+ * the library knows nothing about non-ASCII characters - the hard-coded
+ * Unicode tables below provide a deterministic answer.
+ *
+ * Parameters:
+ *   code_point - the Unicode scalar to measure.
+ *
+ * Returns:
+ *   2 for a wide (double-width) character, 1 for a narrow character, 0 for a
+ *   zero-width combining mark, or -1 for an invalid value (a UTF-16
+ *   surrogate or a value above U+10FFFF).
+ */
 int text_layout_code_point_width(uint32_t code_point)
 {
     int width;
@@ -90,6 +144,23 @@ int text_layout_code_point_width(uint32_t code_point)
     return 1;
 }
 
+/*
+ * Convert a logical code-point boundary to its zero-based visual column.
+ *
+ * The first `logical_column` code points of the line are walked and their
+ * display widths summed, so tabs and wide characters are reflected in the
+ * result. This is the inverse of text_layout_line_logical_column().
+ *
+ * Parameters:
+ *   line           - the line to measure; must not be NULL.
+ *   logical_column - the zero-based code-point boundary (0 to line length).
+ *   tab_width      - the configured tab stop width; must be greater than 0.
+ *   visual_column  - out-parameter: receives the resulting visual column.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, a tab width of 0, a logical
+ *   column past the end of the line, or an inconsistent line.
+ */
 bool text_layout_line_visual_column(const DocumentLine *line, size_t logical_column, size_t tab_width, size_t *visual_column)
 {
     size_t visual = 0;
@@ -115,6 +186,27 @@ bool text_layout_line_visual_column(const DocumentLine *line, size_t logical_col
     return true;
 }
 
+/*
+ * Convert a visual column to the nearest logical code-point boundary.
+ *
+ * When the target visual column falls inside a tab or a wide character, the
+ * boundary nearest to it is chosen; on a tie the boundary before that
+ * character is preferred. This lets vertical cursor movement land cleanly at
+ * the start or end of a tab stop or double-width character rather than
+ * leaving the cursor "inside" one.
+ *
+ * Parameters:
+ *   line                 - the line to map onto; must not be NULL.
+ *   target_visual_column - the zero-based visual column to convert.
+ *   tab_width            - the configured tab stop width; must be greater
+ *                          than 0.
+ *   logical_column       - out-parameter: receives the code-point boundary
+ *                          (0 to line length).
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, a tab width of 0, or an
+ *   inconsistent line.
+ */
 bool text_layout_line_logical_column(const DocumentLine *line, size_t target_visual_column, size_t tab_width, size_t *logical_column)
 {
     size_t visual = 0;

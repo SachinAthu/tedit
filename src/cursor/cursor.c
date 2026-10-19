@@ -208,20 +208,21 @@ bool cursor_move_end(Cursor *cursor, const Document *document)
 }
 
 /*
- * Move the cursor to another line while preserving its preferred visual column.
+ * Recompute the remembered visual column from the current logical position.
  *
- * The target visual column is mapped to the nearest logical code-point boundary
- * on the destination line. This allows tabs and wide Unicode characters to
- * affect rendering without changing the Document's logical coordinates.
+ * The preferred visual column is the display column the cursor keeps when
+ * moving vertically across lines of differing tab/width layout. This
+ * function (re)derives it from the cursor's current row and column, then
+ * marks the stored value valid.
  *
  * Parameters:
- *   cursor     - the cursor to move.
- *   document   - the document the cursor refers to.
- *   target_row - the zero-based line to move to.
+ *   cursor    - the cursor to update.
+ *   document  - the document the cursor refers to.
+ *   tab_width - the configured tab stop width; must be greater than 0.
  *
  * Returns:
- *   true if the cursor moved, false on NULL arguments or if `target_row` is
- *   out of range.
+ *   true on success, false on NULL arguments, a tab width of 0, a cursor row
+ *   out of range, or an inconsistent line.
  */
 bool cursor_update_preferred_visual_column(Cursor *cursor, const Document *document, size_t tab_width)
 {
@@ -245,7 +246,25 @@ bool cursor_update_preferred_visual_column(Cursor *cursor, const Document *docum
     return true;
 }
 
-/* Move to a target row while preserving the preferred visual display column. */
+/*
+ * Move the cursor to `target_row` while preserving the preferred visual
+ * column.
+ *
+ * If the preferred visual column has not been recorded yet (for example the
+ * cursor was just placed programmatically), it is first derived from the
+ * current position. The stored visual column is then mapped to the nearest
+ * logical column on the destination line.
+ *
+ * Parameters:
+ *   cursor     - the cursor to move.
+ *   document   - the document the cursor refers to.
+ *   target_row - the zero-based line to move to.
+ *   tab_width  - the configured tab stop width; must be greater than 0.
+ *
+ * Returns:
+ *   true if the cursor moved, false on NULL arguments, a tab width of 0, an
+ *   out-of-range row, or an inconsistent line.
+ */
 static bool cursor_move_vertical(Cursor *cursor, const Document *document, size_t target_row, size_t tab_width)
 {
     const DocumentLine *target_line;

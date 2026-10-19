@@ -84,7 +84,14 @@ static bool command_backspace(EditorState *state, bool *changed)
  * following line when the Cursor is at the current line's end. At the end of
  * the final line, the command is a no-op.
  *
- * `changed` is set only when the Document is modified successfully.
+ * Parameters:
+ *   state   - the editor state to modify.
+ *   changed - out-parameter: set to true only when the document was modified.
+ *
+ * Returns:
+ *   true when the command was handled (including "nothing to delete" and
+ *   "deletion failed", which leave the document alone), false on an internal
+ *   cursor-update failure.
  */
 static bool command_delete_character(EditorState *state, bool *changed)
 {

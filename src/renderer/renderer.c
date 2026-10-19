@@ -117,6 +117,23 @@ void renderer_destroy(Renderer *renderer)
     renderer->output_capacity = 0;
 }
 
+/*
+ * Convert the cursor's logical column to its visual display column.
+ *
+ * The result accounts for tab stops and Unicode display widths, so callers
+ * can place the terminal cursor or scroll horizontally by the number of
+ * columns actually shown rather than by raw code-point count.
+ *
+ * Parameters:
+ *   state         - the editor state to inspect; must not be NULL.
+ *   visual_column - out-parameter: receives the zero-based visual column;
+ *                   must not be NULL.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, a tab width of 0, an empty
+ *   document whose cursor is not at (0, 0), a cursor row out of range, or an
+ *   inconsistent line.
+ */
 bool renderer_cursor_visual_column(const EditorState *state, size_t *visual_column)
 {
     const DocumentLine *line;
@@ -145,16 +162,60 @@ bool renderer_cursor_visual_column(const EditorState *state, size_t *visual_colu
                                           visual_column);
 }
 
+/*
+ * Return how many columns a tab advances from `visual_column`.
+ *
+ * Tab stops are fixed at every `tab_width` columns (0, tab_width,
+ * 2*tab_width, ...). The advance is the distance from the current visual
+ * column to the next stop, so it depends on where the tab appears.
+ *
+ * Parameters:
+ *   visual_column - the current zero-based visual column.
+ *   tab_width     - the configured tab stop width.
+ *
+ * Returns:
+ *   the number of columns to advance to the next tab stop.
+ */
 static size_t renderer_tab_advance(size_t visual_column, size_t tab_width)
 {
     return tab_width - (visual_column % tab_width);
 }
 
+/*
+ * Return the terminal display width of one Unicode code point.
+ *
+ * This is a thin wrapper around text_layout_code_point_width() so the
+ * renderer can call the shared layout logic under its own name.
+ *
+ * Parameters:
+ *   code_point - the Unicode scalar to measure.
+ *
+ * Returns:
+ *   2 for a wide character, 1 for a narrow character, 0 for a combining
+ *   mark, or -1 for an invalid value.
+ */
 static int renderer_code_point_width(uint32_t code_point)
 {
     return text_layout_code_point_width(code_point);
 }
 
+/*
+ * Draw one complete frame of the editor from the given state.
+ *
+ * The visible document is copied into the off-screen ScreenBuffer, written
+ * to the terminal, and finished by placing the visible cursor at the
+ * editor's cursor position (or at the filename-entry cursor while that
+ * prompt is active). The editor state is read but never modified.
+ *
+ * Parameters:
+ *   renderer - the renderer that owns the off-screen buffer; must not be
+ *              NULL.
+ *   state    - the editor state to draw; must not be NULL.
+ *
+ * Returns:
+ *   true if the frame was written, false on NULL arguments, an invalid
+ *   state/buffer combination, or any write failure.
+ */
 bool renderer_render(Renderer *renderer, const EditorState *state)
 {
     bool success;
