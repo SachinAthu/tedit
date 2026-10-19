@@ -11,6 +11,8 @@ static void assert_mapping(InputEventType event_type, uint32_t character,
     assert(input_engine_translate(&event, &command));
     assert(command.type == expected_type);
     assert(command.character == expected_character);
+    /* The Event Loop supplies visible page height after translation. */
+    assert(command.page_rows == 0);
 }
 
 static void test_all_supported_mappings(void)

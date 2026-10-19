@@ -2,9 +2,9 @@
 
 ## Project Status
 
-**Active — Volume X implementation**
+**Active — Volume X implementation; Chapter 53 keyboard integration complete**
 
-Chapters 45–51 and Chapter 52 sections 52.2–52.8 are implemented in the current source snapshot. The interface includes a bottom Status Bar, a white Message Bar with black text, filename editing with cursor navigation and Delete, and dirty-quit confirmation. Ctrl-S saves named documents to their current path and opens filename entry for unnamed documents; no separate Save As command is implemented. Debug and warning-clean builds pass all eight CTest targets, and pseudo-terminal checks cover the latest interface flows.
+Chapters 45–51, Chapter 52 sections 52.2–52.8, and Chapter 53 sections 53.2–53.11 are implemented in the current source snapshot. The interface includes a bottom Status Bar, a white Message Bar with black text, filename editing with cursor navigation and Delete, and dirty-quit confirmation. Ctrl-S saves named documents to their current path and opens filename entry for unnamed documents; no separate Save As command is implemented. Debug and warning-clean builds pass all eight CTest targets, and pseudo-terminal checks cover the latest interface flows.
 
 ## Completed
 
@@ -160,31 +160,31 @@ The current build and registered tests pass, and the user has confirmed the two 
 | Backspace character deletion and line merging               | Implemented                                                                                         |
 | Enter and logical-line splitting                            | Implemented                                                                                         |
 | Dirty Flag                                                  | Updated after successful insertion, deletion, splitting, and merging                                |
-| Cursor navigation                                           | Arrow-key movement implemented; Home, End, Page Up, and Page Down deferred                          |
+| Cursor navigation                                           | Arrow keys, Home/End, and Page Up/Down implemented                                 |
 | Viewport and scrolling                                      | Implemented; vertical and horizontal behavior manually verified in WSL                              |
 | File loading                                                | Implemented: UTF-8 decode, LF/CRLF normalization, empty files, startup filename                     |
 | File saving                                                 | Safe save implemented; Ctrl-S saves current path or opens filename entry for unnamed documents      |
 | Dedicated Input Parser and command pipeline                 | Input Parser, Input Engine, and Command Engine implemented                                          |
 | Status Bar and Message Bar                                  | Implemented; Status Bar bottom, white Message Bar, one-row separator                                |
 | Terminal resize handling                                    | Not implemented                                                                                     |
-| Unicode-aware input and display-width mapping               | Not implemented                                                                                     |
+| Unicode-aware input and display-width mapping               | Implemented for wide code points and combining marks; locale wcwidth plus deterministic fallback ranges |
 | Automated tests                                             | Eight CTest targets pass in Debug and warning-clean builds                                          |
 | Hardening and final integration                             | Pending                                                                                             |
 
 ## Current Milestone
 
-**Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation**
+**Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests**
 
-The current implementation has the complete input pipeline, filename entry for unnamed documents, refined interface layout, and dirty-quit confirmation. Ctrl-S saves a named document to its current path; no separate Save As command is implemented. Eight CTest targets pass in Debug and warning-clean builds, and pseudo-terminal integration covers the changed workflows.
+Chapter 53.10 consolidates boundary and regression coverage for the keyboard editing and navigation path. Added an input-pipeline regression for Delete at the final line boundary and Delete merging a following line. Existing tests cover Home/End, page navigation boundaries and preferred-column behavior, Unicode code-point editing, tab display columns, viewport constraints, and filename-entry isolation. Debug and warning-clean builds pass all eight CTest targets. A pseudo-terminal run verified printable input, Home, Delete, End, Tab, Ctrl-S filename entry/save, Ctrl-Q exit, exact saved bytes, and alternate-screen restoration.
 
 ## Next Milestone
 
-**Chapter 53**
+**Chapter 53.11 — Resulting Implementation State**
 
 ## Current Limitations
 
 - Non-ASCII filename bytes are preserved for file operations but rendered as `?` in the Status Bar and filename-entry prompt.
-- Document Delete, Home, End, Page Up, Page Down, and Tab are not implemented yet; Delete-key input is currently handled only during filename entry.
+- Unicode display width is handled with POSIX `wcwidth()` where available, plus fallback ranges for common combining and wide-character blocks. The fallback ranges are not a complete, versioned Unicode East Asian Width database; grapheme clusters, emoji ZWJ sequences, and terminal-specific width differences remain limitations.
 - Ctrl-S on a named document saves to the current path. A separate Save As command is intentionally deferred.
 - Terminal resizing and frame reinitialization are not implemented.
 - Broader allocation-failure, sanitizer, and terminal-size integration coverage remains part of hardening.
@@ -270,3 +270,119 @@ Current next milestone: Chapter 53.
 - [x] Pseudo-terminal checks pass for filename editing/saving, Message Bar styling, and dirty-quit workflows.
 
 Next: Chapter 53.
+
+
+## Chapter 53.2 — Terminal Sequences for Additional Keys
+
+- [x] Added abstract Input Events for Home, End, Page Up, Page Down, and Tab.
+- [x] Parsed common terminal sequences for Home (`CSI H`, `CSI 1 ~`, `CSI 7 ~`) and End (`CSI F`, `CSI 4 ~`, `CSI 8 ~`).
+- [x] Parsed Page Up (`CSI 5 ~`) and Page Down (`CSI 6 ~`).
+- [x] Recognized Tab (`0x09`) as `INPUT_EVENT_TAB`.
+- [x] Added Input Parser regression tests for each supported sequence.
+- [x] Debug build and all eight CTest targets pass.
+- [x] Map Home and End events through Input Engine and Command Engine.
+- [x] Add Cursor Home/End operations using logical code-point columns.
+- [x] Add Cursor, Command Engine, Input Engine, and end-to-end input regression tests.
+- [x] Debug build and all eight CTest targets pass.
+
+Next: Chapter 53.4 — Delete-Key Editing.
+
+
+## Chapter 53.5 — Page Up and Page Down Navigation
+
+- [x] Added Cursor operations for page-sized vertical movement.
+- [x] Page distance comes from `Renderer.document_rows` and is supplied by the Event Loop.
+- [x] Mapped Page Up and Page Down input events to explicit Editor Commands.
+- [x] Preserved the preferred logical column across page movement, including short destination lines.
+- [x] Added command and input-pipeline regression tests for boundaries, no-op behavior, Dirty Flag preservation, and terminal sequences.
+- [x] Debug warning-clean build passes with `-Wall -Wextra -Wpedantic -Werror`.
+- [x] All eight CTest targets pass.
+
+## Chapter 53.6 — Tab Insertion and Configured Tab Width
+
+- [x] Added `EditorConfiguration` to `EditorState` with `DEFAULT_TAB_WIDTH` set to 4.
+- [x] Mapped `INPUT_EVENT_TAB` to the dedicated `EDITOR_COMMAND_INSERT_TAB` command.
+- [x] Inserted U+0009 as one logical Document code point; the command sets Dirty Flag and redraw only after a successful insertion.
+- [x] Kept Tab inert in filename-entry mode by using a distinct command type.
+- [x] Expanded tabs into screen-buffer spaces through the next configured tab stop.
+- [x] Added a Renderer helper to convert logical cursor position to visual display column.
+- [x] Passed visual cursor columns to Viewport visibility calculations and terminal cursor positioning.
+- [x] Updated Viewport coordinate documentation to define `viewport_column` as a visual column.
+- [x] Added tests for Tab mapping/insertion, configured tab stops, screen-buffer expansion, cursor placement, and the input pipeline.
+- [x] Debug build and all eight CTest targets pass.
+- [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight CTest targets pass.
+- [x] Pseudo-terminal check confirms Tab insertion, Ctrl-S saving, and Ctrl-Q exit; the saved file preserves U+0009.
+
+Note: this milestone provides the built-in configuration value and consuming API field. Reading user configuration files and command-line configuration overrides remain outside this milestone.
+
+Next: Chapter 53.7 — UTF-8 Keyboard Input and Character-Boundary Editing.
+
+
+## Chapter 53.7 — UTF-8 Keyboard Input and Character-Boundary Editing
+
+- [x] Verified UTF-8 parser behavior for two-, three-, and four-byte Unicode scalar values.
+- [x] Added malformed-sequence coverage for invalid lead bytes, overlong encodings, surrogate values, values above U+10FFFF, and interrupted sequences.
+- [x] Verified parser timeout clears incomplete UTF-8 state and subsequent ASCII input remains usable.
+- [x] Added Command Engine regression coverage proving Backspace removes one stored Unicode code point at a time.
+- [x] Added end-to-end parser-to-command tests proving a four-byte UTF-8 sequence produces one Document code point and Backspace removes that code point as one character.
+- [x] Debug warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) passes.
+- [x] All eight CTest targets pass.
+
+Next: Chapter 53.8 — Logical Cursor Positions and Visual Display Columns.
+
+
+**Chapter 53.8 implementation result:** The Screen Buffer now represents wide-character continuation cells and stores combining marks alongside their base cell. The Renderer calculates logical-to-visual positions using tab stops and Unicode display widths, and emits wide and combining code points without counting UTF-8 bytes as terminal columns. Tests cover CJK width, combining marks, and cursor placement.
+
+
+## Chapter 53.8 — Logical Cursor Positions and Visual Display Columns
+
+- [x] Kept Cursor and Document columns measured in logical Unicode code points.
+- [x] Added display-width calculation for ordinary, wide, and combining code points; retained configured tab-stop expansion.
+- [x] Extended ScreenCell with wide-character continuation and attached combining-mark storage.
+- [x] Updated frame output to emit wide characters once, skip continuation cells, and emit combining marks with their base cell.
+- [x] Updated terminal cursor mapping and retained visual-column Viewport integration.
+- [x] Added regression coverage for CJK width, combining-mark attachment, UTF-8 output, and cursor display columns.
+- [x] Debug build and all eight CTest targets pass.
+- [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight CTest targets pass.
+
+Next: Chapter 53.9 — Input Engine and Command Engine Integration.
+
+
+## Chapter 53.9 — Input Engine and Command Engine Integration
+
+- [x] Audited the complete parser → Input Engine → Command Engine path for the Chapter 53 keyboard additions.
+- [x] Added end-to-end coverage for alternate Home (`CSI 1 ~`) and End (`CSI 8 ~`) sequences reaching Cursor navigation.
+- [x] Added end-to-end coverage proving Tab, Home, End, Page Up, and Page Down do not mutate the Document or filename when the filename-entry mode is active.
+- [x] Verified Escape timeout still routes to the Cancel command and closes filename entry.
+- [x] Input Engine tests explicitly verify that `page_rows` is zero after translation; the Event Loop supplies `Renderer.document_rows` before command execution.
+- [x] Debug build and all eight CTest targets pass.
+- [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight CTest targets pass.
+- [x] Pseudo-terminal check exercised printable input, alternate Home/End, Page Up/Down, Tab, and dirty-quit discard; process exited cleanly and restored the alternate screen.
+
+Next: Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests.
+
+
+## Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests
+
+- [x] Added input-pipeline regression for Delete at the final empty line (no-op, no Dirty Flag change, no redraw).
+- [x] Added input-pipeline regression for Delete at the end of a non-final line (merges the next line, marks dirty, and redraws).
+- [x] Retained existing coverage for Home/End boundaries, Page Up/Down document boundaries, preferred-column preservation, Unicode code-point editing, tab visual columns, viewport validation, and filename-entry isolation.
+- [x] Debug CMake build and all eight CTest targets pass.
+- [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight CTest targets pass.
+- [x] Pseudo-terminal editing/save/exit test passed; saved output was exactly `bc\t\n`, and alternate-screen restoration was observed.
+
+Chapter 53.11 — Resulting Implementation State is complete. Next: Chapter 54 — Hardening the Editor.
+
+
+## Chapter 53.11 — Resulting Implementation State
+
+- [x] Recorded the final Chapter 53 feature set and architectural boundaries.
+- [x] Confirmed Home/End, Delete, Page Up/Page Down, and Tab are integrated through the established input and command pipeline.
+- [x] Confirmed UTF-8 input is decoded into Unicode scalar values and editing uses logical code-point positions.
+- [x] Confirmed Renderer visual-column mapping covers configured tab stops, wide code points, and combining marks, while recording Unicode width limitations.
+- [x] Updated current-state, implementation-status, implementation-notes, and known-issues records.
+- [x] Fresh Debug build and all eight CTest targets passed.
+- [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight CTest targets passed.
+- [x] Pseudo-terminal workflow verified exact saved bytes `bc\t\n`, exit status 0, and alternate-screen restoration.
+
+Next: Chapter 54 — Hardening the Editor.

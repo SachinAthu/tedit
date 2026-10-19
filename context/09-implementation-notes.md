@@ -670,3 +670,107 @@ The final screen layout uses `rows - 3` document rows, one blank separator row, 
 Ctrl-Q checks the Dirty Flag. A clean document exits immediately. A dirty document enters a confirmation state: `Y` routes through the existing save path, `N` quits without saving, and Escape cancels. If there is no associated path, choosing `Y` activates filename entry and records `quit_after_save`; only successful saving causes the Event Loop to exit. Save failure leaves the editor open and the Dirty Flag set. The existing safe-save and atomic replacement implementation is unchanged. The user explicitly chose not to add a separate Save As command for named documents; Ctrl-S keeps its existing meaning.
 
 Verification: Debug and warning-clean builds pass all eight CTest targets. Pseudo-terminal checks verified filename insertion/movement/Delete and save, white-background/black-foreground Message Bar output, and dirty-quit confirmation, Escape cancellation, and discard.
+
+
+## Chapter 53.2 — Terminal Sequences for Additional Keys
+
+The Input Parser now recognizes Home, End, Page Up, Page Down, and Tab without exposing raw terminal sequences to the rest of the editor. Home accepts CSI `H`, `1~`, and `7~`; End accepts CSI `F`, `4~`, and `8~`. Page navigation accepts CSI `5~` and `6~`, while Tab is emitted from byte `0x09`. Existing Delete parsing (`CSI 3~`) is retained.
+
+The parser tests cover each supported form. The Debug build and all eight CTest targets pass. This section deliberately changes only input recognition; command mapping and behavior will be implemented in subsequent sections.
+
+
+## Chapter 53.3 — Home and End Navigation
+
+Added `cursor_move_home()` and `cursor_move_end()` to the Cursor module. Home sets the current logical column and preferred column to zero. End uses the current `DocumentLine.length`, which is measured in Unicode code points rather than UTF-8 bytes. Both operations leave the row unchanged and report whether the position changed. The Input Engine maps `INPUT_EVENT_HOME` and `INPUT_EVENT_END` to explicit navigation commands, and the Command Engine executes them against the current Cursor. Page Up, Page Down, and Tab are recognized as input events but intentionally remain no-op commands until their own implementation sections.
+
+Regression coverage now includes empty-line and boundary behavior, preferred-column updates, command-level redraw decisions, event-to-command mapping, and Home/End sequences through the parser-to-command pipeline. Verification: Debug build and all eight CTest targets pass.
+
+
+## Chapter 53.4 — Delete-Key Editing
+
+Connected `EDITOR_COMMAND_DELETE_CHARACTER` to document editing. When the Cursor is before the current logical line's end, the Command Engine calls `document_delete_character()` at the Cursor's logical code-point column. When the Cursor is at line end and a following line exists, it calls `document_merge_lines()` on the current row and keeps the Cursor at the join point. At the end of the final line, Delete is a no-op.
+
+The Cursor is revalidated with `cursor_set_position()` after a successful mutation, resetting the preferred column to the current logical column. The Dirty Flag and redraw result change only after a successful deletion or merge. Document operations remain responsible for allocation and storage; the Command Engine coordinates the Cursor and Editor State. Filename-entry Delete behavior is unchanged.
+
+Regression tests cover deleting an ASCII character, deleting before a multi-byte Unicode code point, joining adjacent lines, preserving the join position, and doing nothing at the final document boundary. The input-pipeline test verifies `ESC [ 3 ~` reaches document editing. Debug and warning-clean builds pass all eight CTest targets.
+
+
+## Chapter 53.5 — Page Up and Page Down Navigation
+
+`Cursor` now provides `cursor_move_page_up()` and `cursor_move_page_down()`. These operations reuse the existing vertical-movement helper, so the cursor moves by a requested number of logical rows while preserving `preferred_column`; a shorter destination line clamps the actual column without losing the preferred value. Movement clamps to the first and last Document rows and returns false when no position change is possible.
+
+`EditorCommand` now includes `page_rows`, used only by page-navigation commands. The Event Loop supplies the current `Renderer.document_rows`, which reflects the visible document area rather than the total terminal height. The Input Engine maps Page Up and Page Down to their commands, and the Command Engine invokes the Cursor operations. Page movement does not edit text or change the Dirty Flag.
+
+Regression coverage exercises page-sized movement, top/bottom boundaries, short-line clamping and preferred-column recovery, redraw behavior, and `ESC [ 5 ~` / `ESC [ 6 ~` through the complete input pipeline. Verification: a Debug build with `-Wall -Wextra -Wpedantic -Werror` succeeds and all eight CTest targets pass.
+
+
+## Chapter 53.6 — Tab Insertion and Configured Tab Width
+
+`EditorState` now owns an `EditorConfiguration` value whose `tab_width` is initialized to `DEFAULT_TAB_WIDTH` (4). This milestone introduces the built-in setting and its consumer; it does not add configuration-file parsing or command-line overrides.
+
+The Input Engine maps `INPUT_EVENT_TAB` to `EDITOR_COMMAND_INSERT_TAB`, rather than treating Tab as a generic printable character. The Command Engine inserts U+0009 into the Document as one logical code point. Because this is a dedicated command, filename-entry mode does not append a tab to a path. The existing Document and Cursor APIs continue to count logical code points, so insertion advances the Cursor by one logical column and marks the Document dirty only on success.
+
+The Renderer expands each U+0009 into spaces through the next tab stop. A public `renderer_cursor_visual_column()` helper maps the current logical Cursor position to a visual display column. The Event Loop uses that result when ensuring Cursor visibility; the Renderer uses it for bounds validation and final terminal cursor placement. `Viewport.viewport_column` therefore represents a visual column, while `Cursor.column` remains a logical code-point column. Other Unicode code points still occupy one display cell in this milestone; full Unicode display-width handling remains in Sections 53.7–53.8.
+
+Tests cover the default tab width, a non-default width, visual cursor mapping, spaces in the Screen Buffer, Tab event-to-command mapping, insertion through the complete input pipeline, and the existing regression suite. Verification: Debug and warning-clean builds (`-Wall -Wextra -Wpedantic -Werror`) pass all eight CTest targets. A pseudo-terminal check inserted `a`, Tab, and `b`, saved with Ctrl-S, and exited with Ctrl-Q; the saved file contained `a\tb\n`.
+
+
+## Chapter 53.7 — UTF-8 Keyboard Input and Character-Boundary Editing
+
+The Input Parser accumulates UTF-8 lead and continuation bytes and emits `INPUT_EVENT_CHARACTER` only when a complete valid Unicode scalar value has been decoded. Tests now cover two-byte U+00E9, three-byte U+20AC, and four-byte U+1F600 input. Invalid leading bytes, overlong sequences, UTF-16 surrogate values, values above U+10FFFF, interrupted sequences, and timeouts do not produce partial character events. If a non-continuation byte arrives during a sequence, the incomplete scalar is discarded and that byte is parsed again as a possible independent key.
+
+The Document stores `uint32_t` code points in each logical line; `DocumentLine.length` and `Cursor.column` are logical code-point counts, not UTF-8 byte offsets. The Command Engine's Backspace and Delete operations call Document operations at these logical positions. Added tests prove that a four-byte UTF-8 sequence inserts one code point and that Backspace removes it in one operation, updating the Cursor by one logical column. Existing Delete tests cover deletion of a multi-byte character at the cursor.
+
+Verification: configured a fresh Debug build with `-Wall -Wextra -Wpedantic -Werror`, compiled all targets, and passed all eight CTest targets. This section verifies input decoding and logical editing boundaries; it does not yet implement terminal display-width calculations for wide or combining characters, which are addressed by Section 53.8.
+
+
+## Chapter 53.8 — Logical Cursor Positions and Visual Display Columns
+
+- Kept `Cursor.column` and Document line lengths in logical Unicode code points.
+- Added display-width mapping in the Renderer: tabs advance to the next configured tab stop, wide characters occupy two screen cells, and combining marks attach to the prior cell without advancing the visual column. A leading combining mark uses a dotted-circle base for visible rendering.
+- Extended `ScreenCell` with a wide-character continuation marker and dynamically stored combining code points. Screen-buffer clearing resets visible mark counts while retaining allocations for reuse; destruction releases those allocations.
+- Uses POSIX `wcwidth()` in a Unicode-capable locale and fallback ranges for common combining and wide Unicode blocks in the C/POSIX locale. This fallback is intentionally not represented as a complete Unicode width database.
+- Updated the renderer cursor mapping and retained the existing Viewport interface, which receives visual display columns.
+- Added a regression test for CJK wide width, combining-mark attachment, terminal UTF-8 output, and cursor positioning.
+
+
+## Chapter 53.9 — Input Engine and Command Engine Integration
+
+The integration audit confirmed the existing production path remains layered: the Input Parser recognizes raw terminal bytes and emits abstract events, the Input Engine translates each event to an `EditorCommand`, the Event Loop supplies the visible page height for page-navigation commands, and the Command Engine performs state changes. No production-code change was required for this milestone; the remaining gaps were integration-level regression coverage.
+
+`tests/test_input_engine.c` now asserts that `page_rows` is initialized to zero by translation. This keeps terminal geometry out of the Input Engine; `src/main.c` remains responsible for setting `command.page_rows = renderer->document_rows` immediately before execution. `tests/test_input_pipeline.c` verifies that the alternate Home and End CSI parameter sequences reach the Cursor commands, and that Tab, Home, End, Page Up, and Page Down are ignored while filename entry is active. The latter test also exercises the parser timeout → Escape event → Cancel command path.
+
+Verification: configured and built Debug and warning-clean configurations with `-Wall -Wextra -Wpedantic -Werror`; all eight CTest targets pass in both. A pseudo-terminal run exercised printable input, alternate Home/End, Page Up/Down, Tab, and dirty-quit discard; the editor exited successfully and restored the alternate screen. No new unresolved implementation issue was identified.
+
+
+## Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests
+
+Added `test_delete_boundaries_through_pipeline()` to `tests/test_input_pipeline.c`. The test sends the terminal Delete sequence (`ESC [ 3 ~`) through the Input Parser, Input Engine, and Command Engine. At the end of the final empty line, Delete leaves the Document clean and unchanged and requests no redraw. After Enter creates a second empty line, moving to the first line and pressing Delete merges the following line, leaves the Cursor at the join point, sets the Dirty Flag, and requests redraw.
+
+The existing test suite also covers Home/End boundaries, Page Up/Down clamping and preferred-column recovery, Unicode scalar input and code-point deletion, configured Tab display columns, zero-line Document behavior, viewport boundary validation, and filename-entry isolation. No production-code change was needed in this section.
+
+Verification performed from a fresh build directory: Debug CMake build and all eight CTest targets passed. A separate warning-clean build using `-Wall -Wextra -Wpedantic -Werror` also passed all eight targets. A pseudo-terminal session sent `abc`, Home, Delete, End, Tab, Ctrl-S, a temporary filename, Enter, and Ctrl-Q. The saved file contained exactly `bc\t\n`; the process exited successfully and emitted the alternate-screen restoration sequence.
+
+
+## Chapter 53.11 — Resulting Implementation State
+
+No production source changes were required for this final recording section. The completed implementation state was consolidated across the project records after checking the current repository snapshot.
+
+### Chapter 53 capability summary
+
+- Input Parser recognizes Home, End, Page Up, Page Down, Tab, and Delete sequences while retaining arrow, Backspace, Enter, and control-key handling.
+- Input Engine maps recognized events to typed commands; the Event Loop supplies the visible page height for page navigation; the Command Engine applies Cursor movement and document edits.
+- Home/End operate on logical line boundaries. Page movement uses the visible document height, clamps to Document boundaries, and preserves the preferred logical column.
+- Delete removes one code point at the Cursor or merges the next logical line when positioned at the end of a non-final line. A Delete at the final Document boundary is a no-op.
+- Tab inserts U+0009 as one logical code point. The Renderer expands it to the next configured tab stop; the built-in width is four columns.
+- UTF-8 keyboard sequences are decoded into Unicode scalar values. Document line lengths and Cursor columns count code points rather than UTF-8 bytes.
+- Renderer maps logical positions to visual columns and handles tabs, wide code points, and combining marks. The Viewport uses visual columns for horizontal visibility.
+- Filename-entry mode remains isolated from document-only navigation and editing commands.
+
+### Final verification
+
+A fresh Debug build was configured with `cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug`, built successfully, and all eight CTest targets passed. A separate build configured with `-Wall -Wextra -Wpedantic -Werror` also built successfully and passed all eight CTest targets. A pseudo-terminal run sent `abc`, Home, Delete, End, Tab, Ctrl-S, a filename, Enter, and Ctrl-Q. The saved file contained exactly `bc\t\n`; the editor exited with status zero and emitted the alternate-screen restoration sequence.
+
+### Scope boundary
+
+Chapter 53 completes the established keyboard editing and navigation baseline; it does not claim terminal resize handling, allocation-failure hardening, a complete Unicode grapheme-width database, non-ASCII filename rendering, configuration-file parsing or command-line configuration overrides, or incremental rendering. These remain recorded as limitations for subsequent hardening.
