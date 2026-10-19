@@ -8,6 +8,7 @@
 #include "terminal/terminal.h"
 
 #include <errno.h>
+#include <locale.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <sys/select.h>
@@ -252,6 +253,8 @@ static bool application_event_loop(EditorState *state, Renderer *renderer, const
  */
 int main(int argc, char *argv[])
 {
+    (void)setlocale(LC_CTYPE, "");
+
     if (argc > 2)
     {
         fprintf(stderr, "Usage: %s [filename]\n", argv[0]);

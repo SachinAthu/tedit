@@ -6,14 +6,16 @@
 #include <stdint.h>
 
 /*
- * A single character cell on the screen grid.
- *
- * For now a cell only stores one Unicode code point; later it could grow to
- * also hold colors or styles.
+ * A terminal display cell. Wide code points use a base cell plus a continuation
+ * cell; zero-width combining code points are stored with their base cell.
  */
 typedef struct
 {
     uint32_t code_point;
+    bool continuation;
+    uint32_t *combining_code_points;
+    size_t combining_count;
+    size_t combining_capacity;
 } ScreenCell;
 
 /*
@@ -90,5 +92,11 @@ bool screen_buffer_set(ScreenBuffer *buffer, size_t row, size_t column, uint32_t
  *   coordinates are out of range.
  */
 const ScreenCell *screen_buffer_get(const ScreenBuffer *buffer, size_t row, size_t column);
+
+/* Mark a cell as the second column occupied by a wide code point. */
+bool screen_buffer_set_continuation(ScreenBuffer *buffer, size_t row, size_t column);
+
+/* Append a zero-width combining code point to an existing base cell. */
+bool screen_buffer_append_combining(ScreenBuffer *buffer, size_t row, size_t column, uint32_t code_point);
 
 #endif

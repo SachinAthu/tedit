@@ -43,7 +43,7 @@ bool screen_buffer_init(ScreenBuffer *buffer, size_t rows, size_t columns)
     }
 
     /* Allocate one contiguous block holding every cell. */
-    buffer->cells = malloc(cell_count * sizeof(*buffer->cells));
+    buffer->cells = calloc(cell_count, sizeof(*buffer->cells));
     if (buffer->cells == NULL)
     {
         return false;
@@ -74,6 +74,14 @@ void screen_buffer_destroy(ScreenBuffer *buffer)
         return;
     }
 
+    if (buffer->cells != NULL)
+    {
+        const size_t cell_count = buffer->rows * buffer->columns;
+        for (size_t index = 0; index < cell_count; ++index)
+        {
+            free(buffer->cells[index].combining_code_points);
+        }
+    }
     free(buffer->cells);
 
     buffer->cells = NULL;
@@ -103,10 +111,12 @@ void screen_buffer_clear(ScreenBuffer *buffer, uint32_t code_point)
 
     size_t cell_count = buffer->rows * buffer->columns;
 
-    /* Overwrite each cell; only the code_point field is used for now. */
+    /* Clear visible content while retaining allocated combining-mark capacity. */
     for (size_t index = 0; index < cell_count; ++index)
     {
         buffer->cells[index].code_point = code_point;
+        buffer->cells[index].continuation = false;
+        buffer->cells[index].combining_count = 0;
     }
 }
 
@@ -135,6 +145,8 @@ bool screen_buffer_set(ScreenBuffer *buffer, size_t row, size_t column, uint32_t
     /* Convert the 2D coordinate into a 1D block index. */
     index = row * buffer->columns + column;
     buffer->cells[index].code_point = code_point;
+    buffer->cells[index].continuation = false;
+    buffer->cells[index].combining_count = 0;
 
     return true;
 }
@@ -163,4 +175,48 @@ const ScreenCell *screen_buffer_get(const ScreenBuffer *buffer, size_t row, size
     index = row * buffer->columns + column;
 
     return &buffer->cells[index];
+}
+
+
+bool screen_buffer_set_continuation(ScreenBuffer *buffer, size_t row, size_t column)
+{
+    size_t index;
+    if (buffer == NULL || buffer->cells == NULL || row >= buffer->rows || column >= buffer->columns)
+    {
+        return false;
+    }
+    index = row * buffer->columns + column;
+    buffer->cells[index].code_point = (uint32_t)' ';
+    buffer->cells[index].continuation = true;
+    buffer->cells[index].combining_count = 0;
+    return true;
+}
+
+bool screen_buffer_append_combining(ScreenBuffer *buffer, size_t row, size_t column, uint32_t code_point)
+{
+    size_t index;
+    ScreenCell *cell;
+    if (buffer == NULL || buffer->cells == NULL || row >= buffer->rows || column >= buffer->columns)
+    {
+        return false;
+    }
+    index = row * buffer->columns + column;
+    cell = &buffer->cells[index];
+    if (cell->combining_count == cell->combining_capacity)
+    {
+        size_t capacity = cell->combining_capacity == 0 ? 2 : cell->combining_capacity * 2;
+        if (capacity < cell->combining_capacity || capacity > SIZE_MAX / sizeof(*cell->combining_code_points))
+        {
+            return false;
+        }
+        uint32_t *larger = realloc(cell->combining_code_points, capacity * sizeof(*larger));
+        if (larger == NULL)
+        {
+            return false;
+        }
+        cell->combining_code_points = larger;
+        cell->combining_capacity = capacity;
+    }
+    cell->combining_code_points[cell->combining_count++] = code_point;
+    return true;
 }

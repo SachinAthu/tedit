@@ -6,6 +6,7 @@
 #include "terminal/terminal.h"
 
 #include <assert.h>
+#include <locale.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -487,6 +488,59 @@ static void test_tab_width_and_visual_cursor_column(void)
     editor_state_destroy(&state);
 }
 
+
+/* Wide code points occupy two cells; combining marks attach to their base. */
+static void test_unicode_visual_width_and_combining_marks(void)
+{
+    EditorState state;
+    Renderer renderer;
+    size_t visual_column;
+    const ScreenCell *cell;
+    int output_pipe[2];
+    int saved_stdout;
+    char output[4096];
+    ssize_t output_length;
+
+    assert(editor_state_init(&state));
+    assert(renderer_init(&renderer, 4, 12));
+    assert(document_insert_character(&state.document, 0, 0, (uint32_t)'a'));
+    assert(document_insert_character(&state.document, 0, 1, UINT32_C(0x4E2D))); /* 中 */
+    assert(document_insert_character(&state.document, 0, 2, UINT32_C(0x0301))); /* combining acute */
+    assert(document_insert_character(&state.document, 0, 3, (uint32_t)'b'));
+
+    assert(cursor_set_position(&state.cursor, &state.document, 0, 3));
+    assert(renderer_cursor_visual_column(&state, &visual_column) && visual_column == 3);
+    assert(cursor_set_position(&state.cursor, &state.document, 0, 4));
+    assert(renderer_cursor_visual_column(&state, &visual_column) && visual_column == 4);
+
+    assert(cursor_set_position(&state.cursor, &state.document, 0, 3));
+    assert(pipe(output_pipe) == 0);
+    saved_stdout = dup(STDOUT_FILENO);
+    assert(saved_stdout >= 0);
+    assert(dup2(output_pipe[1], STDOUT_FILENO) == STDOUT_FILENO);
+    close(output_pipe[1]);
+    assert(renderer_render(&renderer, &state));
+    assert(dup2(saved_stdout, STDOUT_FILENO) == STDOUT_FILENO);
+    close(saved_stdout);
+    output_length = read(output_pipe[0], output, sizeof(output) - 1);
+    assert(output_length >= 0);
+    output[output_length] = '\0';
+    close(output_pipe[0]);
+
+    cell = screen_buffer_get(&renderer.screen_buffer, 0, 1);
+    assert(cell != NULL && cell->code_point == UINT32_C(0x4E2D));
+    assert(cell->combining_count == 1 && cell->combining_code_points[0] == UINT32_C(0x0301));
+    cell = screen_buffer_get(&renderer.screen_buffer, 0, 2);
+    assert(cell != NULL && cell->continuation);
+    cell = screen_buffer_get(&renderer.screen_buffer, 0, 3);
+    assert(cell != NULL && cell->code_point == (uint32_t)'b');
+    assert(strstr(output, "\xE4\xB8\xAD\xCC\x81") != NULL);
+    assert(strstr(output, "\x1b[1;4H") != NULL);
+
+    renderer_destroy(&renderer);
+    editor_state_destroy(&state);
+}
+
 /* The final row is the Status Bar and reports name, dirty state, and position. */
 static void test_renderer_draws_status_bar(void)
 {
@@ -853,7 +907,9 @@ static void test_viewport_rejects_invalid_dimensions(void)
 
 int main(void)
 {
+    assert(setlocale(LC_CTYPE, "") != NULL);
     test_tab_width_and_visual_cursor_column();
+    test_unicode_visual_width_and_combining_marks();
     test_document_insert_and_delete();
     test_cursor_horizontal_movement();
     test_cursor_home_and_end();

@@ -75,8 +75,9 @@ bool renderer_render(Renderer *renderer, const EditorState *state);
 
 /*
  * Convert the current logical Cursor column to its visual display column.
- * Tabs advance to the next configured tab stop. Other code points occupy one
- * display cell in this milestone; Unicode display-width handling is separate.
+ * Tabs advance to the next configured tab stop. Printable Unicode code points
+ * use the active locale's POSIX wcwidth() result; combining marks occupy no
+ * additional columns and wide characters occupy two.
  *
  * Returns true on success, false for invalid state, invalid tab width, or
  * arithmetic overflow.
