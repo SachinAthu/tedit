@@ -6,7 +6,7 @@ Terminal text editor implementation in C99 for Linux/POSIX, developed incrementa
 
 ## Current Milestone
 
-**Chapter 53.11 — Resulting Implementation State recorded**
+**Chapter 53.11 complete; Status Bar and visual vertical-navigation refinement in progress**
 
 The interface layout now places the Status Bar on the bottom row, reserves one blank separator row above the white Message Bar, and renders Message Bar text in black. During filename entry, the prompt and terminal cursor use the Message Bar row. Filename editing supports Left/Right, insertion at the cursor, Backspace, and Delete; movement and deletion respect UTF-8 byte boundaries.
 
@@ -29,7 +29,7 @@ The Input Parser decodes complete UTF-8 sequences into Unicode scalar values and
 - Debug build and all eight CTest targets pass after the navigation integration.
 - Chapter 53.4 connects Delete to document editing. It removes the code point at the Cursor, merges the next line when the Cursor is at line end, and leaves the final document boundary unchanged.
 - Delete updates the Dirty Flag and requests redraw only after a successful mutation. Tests cover Unicode code points, line merging, final-line no-op, and the full input pipeline.
-- Chapter 53.5 connects Page Up and Page Down through the Input Engine and Command Engine. Page movement uses the actual visible document-row count from the Renderer, clamps at document boundaries, preserves the preferred logical column, and does not mark the Document dirty.
+- Chapter 53.5 connects Page Up and Page Down through the Input Engine and Command Engine. Page movement uses the actual visible document-row count from the Renderer, clamps at document boundaries, preserves the preferred visual column, and does not mark the Document dirty.
 - Chapter 53.6 maps Tab to a dedicated `EDITOR_COMMAND_INSERT_TAB`, inserts U+0009 as one logical Document code point, and marks the Document dirty only after successful insertion. Filename-entry mode ignores the dedicated Tab command.
 - `EditorState.configuration.tab_width` is initialized to `DEFAULT_TAB_WIDTH` (4). The Renderer expands each tab to spaces through the next configured tab stop. `viewport_column` and cursor visibility use visual display columns; `Cursor.column` remains a logical code-point column.
 - Added regression coverage for Tab event mapping, document insertion, default/configured tab widths, expanded screen-buffer cells, visual cursor positioning, and end-to-end Tab input.
@@ -436,8 +436,13 @@ Verification: all eight CTest targets passed in Debug and warning-clean builds (
 
 ## Chapter 53.11 — Resulting Implementation State
 
-Chapter 53 keyboard editing and navigation integration is complete for the established baseline. Home and End move within the current logical line; Delete removes the code point at the Cursor or merges the next line at line end; Page Up and Page Down move by the visible document height while preserving the preferred logical column; Tab inserts U+0009 and is expanded by the Renderer to configured tab stops. UTF-8 input is decoded as complete Unicode scalar values, and document editing operates on logical code points rather than bytes. The Renderer maps logical positions to visual columns for tabs, wide code points, and combining marks. The parser → Input Engine → Command Engine pipeline and filename-entry isolation are covered by tests.
+Chapter 53 keyboard editing and navigation integration is complete for the established baseline. Home and End move within the current logical line; Delete removes the code point at the Cursor or merges the next line at line end; Page Up and Page Down move by the visible document height while preserving the preferred visual column; Tab inserts U+0009 and is expanded by the Renderer to configured tab stops. UTF-8 input is decoded as complete Unicode scalar values, and document editing operates on logical code points rather than bytes. The Renderer maps logical positions to visual columns for tabs, wide code points, and combining marks. The parser → Input Engine → Command Engine pipeline and filename-entry isolation are covered by tests.
 
 Verification for this final Chapter 53 snapshot: fresh Debug configure/build and all eight CTest targets passed; a separate warning-clean configure/build using `-Wall -Wextra -Wpedantic -Werror` and all eight CTest targets passed. A pseudo-terminal run typed `abc`, Home, Delete, End, Tab, Ctrl-S, a filename, Enter, and Ctrl-Q. The saved bytes were exactly `bc\t\n`, the process exited with status 0, and the alternate-screen restoration sequence was observed.
 
 Remaining known limitations are documented in `10-known-issues.md`: terminal resize/reinitialization, allocation-failure coverage, complete Unicode grapheme/terminal width handling, non-ASCII filename display, configuration file loading/CLI overrides, and incremental rendering. These are not claimed as completed by Chapter 53.
+
+
+## Follow-up — Status Bar and Visual Vertical Navigation
+
+The Status Bar now displays `Ln N, Col N, Visual N`, with one-based display values. `Col` is the one-based logical Unicode code-point column; `Visual` is the one-based terminal display column after tab expansion and Unicode width calculation. A shared `src/text/text_layout.{h,c}` utility provides the same display-width and logical/visual mapping to Cursor and Renderer. Cursor now tracks a preferred visual column for Up/Down/Page Up/Page Down. Vertical movement maps the preferred display column to the nearest valid logical boundary on each target line and retains the preference when short lines clamp the actual cursor. Tabs remain stored as tab characters.

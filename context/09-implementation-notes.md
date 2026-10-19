@@ -760,7 +760,7 @@ No production source changes were required for this final recording section. The
 
 - Input Parser recognizes Home, End, Page Up, Page Down, Tab, and Delete sequences while retaining arrow, Backspace, Enter, and control-key handling.
 - Input Engine maps recognized events to typed commands; the Event Loop supplies the visible page height for page navigation; the Command Engine applies Cursor movement and document edits.
-- Home/End operate on logical line boundaries. Page movement uses the visible document height, clamps to Document boundaries, and preserves the preferred logical column.
+- Home/End operate on logical line boundaries. Page movement uses the visible document height, clamps to Document boundaries, and now preserves the preferred visual column under ADR-034.
 - Delete removes one code point at the Cursor or merges the next logical line when positioned at the end of a non-final line. A Delete at the final Document boundary is a no-op.
 - Tab inserts U+0009 as one logical code point. The Renderer expands it to the next configured tab stop; the built-in width is four columns.
 - UTF-8 keyboard sequences are decoded into Unicode scalar values. Document line lengths and Cursor columns count code points rather than UTF-8 bytes.
@@ -774,3 +774,12 @@ A fresh Debug build was configured with `cmake -S . -B build -DCMAKE_BUILD_TYPE=
 ### Scope boundary
 
 Chapter 53 completes the established keyboard editing and navigation baseline; it does not claim terminal resize handling, allocation-failure hardening, a complete Unicode grapheme-width database, non-ASCII filename rendering, configuration-file parsing or command-line configuration overrides, or incremental rendering. These remain recorded as limitations for subsequent hardening.
+
+
+## Follow-up — Status Bar and Visual Vertical Navigation
+
+The Status Bar now renders `Ln N, Col N, Visual N`. All displayed coordinates are one-based: `Col` counts logical Document code points, while `Visual` counts terminal display columns after tab expansion and Unicode width rules. The renderer obtains the visual position from the shared `text/text_layout` module.
+
+Added `Cursor.preferred_visual_column` and its validity flag. Horizontal navigation and editing invalidate the visual preference; the next vertical move derives it from the current logical position. Up/Down/Page Up/Page Down then preserve that visual target across lines, mapping it to the nearest valid logical boundary. When the destination line is short, the actual cursor clamps to its end while the preferred visual column remains unchanged, so moving back to a longer line restores the intended position. The nearest-boundary policy chooses the boundary before a character when distances tie. Tabs remain stored as U+0009; this change does not rewrite document contents.
+
+Regression coverage verifies Status Bar reporting after a tab and vertical movement from a line containing a tab through another tabbed line and a short line, then back again. Debug build and all eight CTest targets pass.

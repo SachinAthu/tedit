@@ -41,6 +41,10 @@ editor/
 │   ├── terminal.h
 │   └── terminal.c
 │
+├── text/
+│   ├── text_layout.h
+│   └── text_layout.c
+│
 ├── viewport/
 │   ├── viewport.h
 │   └── viewport.c
@@ -86,6 +90,7 @@ Rules:
 - Modules depend only on the interfaces they require.
 - Renderer never modifies editor state.
 - Document never depends on Renderer.
+- Cursor and Renderer share display-width calculations through `text/text_layout`; Cursor never depends on Renderer.
 - File Manager never depends on Renderer.
 - Input never depends on File Manager.
 

@@ -1,4 +1,5 @@
 #include "cursor.h"
+#include "text/text_layout.h"
 
 /*
  * Place the cursor at the start of the document (first row, first column).
@@ -19,6 +20,8 @@ void cursor_init(Cursor *cursor)
     cursor->row = 0;
     cursor->column = 0;
     cursor->preferred_column = 0;
+    cursor->preferred_visual_column = 0;
+    cursor->preferred_visual_column_valid = false;
 }
 
 /*
@@ -52,6 +55,8 @@ bool cursor_set_position(Cursor *cursor, const Document *document, size_t row, s
     cursor->row = row;
     cursor->column = column;
     cursor->preferred_column = column;
+    cursor->preferred_visual_column = column;
+    cursor->preferred_visual_column_valid = false;
 
     return true;
 }
@@ -87,6 +92,7 @@ bool cursor_advance(Cursor *cursor, const Document *document)
 
     cursor->column += 1;
     cursor->preferred_column = cursor->column;
+    cursor->preferred_visual_column_valid = false;
 
     return true;
 }
@@ -110,6 +116,7 @@ bool cursor_move_left(Cursor *cursor)
 
     cursor->column -= 1;
     cursor->preferred_column = cursor->column;
+    cursor->preferred_visual_column_valid = false;
     return true;
 }
 
@@ -142,6 +149,7 @@ bool cursor_move_right(Cursor *cursor, const Document *document)
 
     cursor->column += 1;
     cursor->preferred_column = cursor->column;
+    cursor->preferred_visual_column_valid = false;
     return true;
 }
 
@@ -163,6 +171,7 @@ bool cursor_move_home(Cursor *cursor)
 
     cursor->column = 0;
     cursor->preferred_column = 0;
+    cursor->preferred_visual_column_valid = false;
     return true;
 }
 
@@ -194,15 +203,16 @@ bool cursor_move_end(Cursor *cursor, const Document *document)
 
     cursor->column = line->length;
     cursor->preferred_column = cursor->column;
+    cursor->preferred_visual_column_valid = false;
     return true;
 }
 
 /*
- * Move the cursor to another line while preserving its preferred column.
+ * Move the cursor to another line while preserving its preferred visual column.
  *
- * This is shared by cursor_move_up() and cursor_move_down(). It moves to
- * `target_row` and tries to keep the cursor at `preferred_column`; if the
- * target line is shorter than that, the cursor stops at the line's end.
+ * The target visual column is mapped to the nearest logical code-point boundary
+ * on the destination line. This allows tabs and wide Unicode characters to
+ * affect rendering without changing the Document's logical coordinates.
  *
  * Parameters:
  *   cursor     - the cursor to move.
@@ -213,31 +223,57 @@ bool cursor_move_end(Cursor *cursor, const Document *document)
  *   true if the cursor moved, false on NULL arguments or if `target_row` is
  *   out of range.
  */
-static bool cursor_move_vertical(Cursor *cursor, const Document *document,
-                                 size_t target_row)
+bool cursor_update_preferred_visual_column(Cursor *cursor, const Document *document, size_t tab_width)
+{
+    const DocumentLine *line;
+    size_t visual_column;
+
+    if (cursor == NULL || document == NULL || tab_width == 0 ||
+        cursor->row >= document->line_count)
+    {
+        return false;
+    }
+
+    line = &document->lines[cursor->row];
+    if (!text_layout_line_visual_column(line, cursor->column, tab_width, &visual_column))
+    {
+        return false;
+    }
+
+    cursor->preferred_visual_column = visual_column;
+    cursor->preferred_visual_column_valid = true;
+    return true;
+}
+
+/* Move to a target row while preserving the preferred visual display column. */
+static bool cursor_move_vertical(Cursor *cursor, const Document *document, size_t target_row, size_t tab_width)
 {
     const DocumentLine *target_line;
+    size_t target_column;
 
-    if (cursor == NULL || document == NULL ||
-        target_row >= document->line_count)
+    if (cursor == NULL || document == NULL || tab_width == 0 || cursor->row >= document->line_count || target_row >= document->line_count)
+    {
+        return false;
+    }
+
+    if (!cursor->preferred_visual_column_valid && !cursor_update_preferred_visual_column(cursor, document, tab_width))
     {
         return false;
     }
 
     target_line = &document->lines[target_row];
-    cursor->row = target_row;
-    cursor->column = cursor->preferred_column;
-
-    if (cursor->column > target_line->length)
+    if (!text_layout_line_logical_column(target_line, cursor->preferred_visual_column, tab_width, &target_column))
     {
-        cursor->column = target_line->length;
+        return false;
     }
 
+    cursor->row = target_row;
+    cursor->column = target_column;
     return true;
 }
 
 /*
- * Move the cursor up one line, keeping the preferred column when possible.
+ * Move the cursor up one line, preserving the preferred visual column.
  *
  * Parameters:
  *   cursor   - the cursor to move.
@@ -247,7 +283,7 @@ static bool cursor_move_vertical(Cursor *cursor, const Document *document,
  *   true if the cursor moved up, false on NULL arguments or if the cursor is
  *   already on the first line.
  */
-bool cursor_move_up(Cursor *cursor, const Document *document)
+bool cursor_move_up(Cursor *cursor, const Document *document, size_t tab_width)
 {
     if (cursor == NULL || document == NULL || cursor->row == 0 ||
         cursor->row >= document->line_count)
@@ -255,11 +291,11 @@ bool cursor_move_up(Cursor *cursor, const Document *document)
         return false;
     }
 
-    return cursor_move_vertical(cursor, document, cursor->row - 1);
+    return cursor_move_vertical(cursor, document, cursor->row - 1, tab_width);
 }
 
 /*
- * Move the cursor down one line, keeping the preferred column when possible.
+ * Move the cursor down one line, preserving the preferred visual column.
  *
  * Parameters:
  *   cursor   - the cursor to move.
@@ -269,7 +305,7 @@ bool cursor_move_up(Cursor *cursor, const Document *document)
  *   true if the cursor moved down, false on NULL arguments or if the cursor is
  *   already on the last line.
  */
-bool cursor_move_down(Cursor *cursor, const Document *document)
+bool cursor_move_down(Cursor *cursor, const Document *document, size_t tab_width)
 {
     if (cursor == NULL || document == NULL ||
         cursor->row >= document->line_count ||
@@ -278,12 +314,12 @@ bool cursor_move_down(Cursor *cursor, const Document *document)
         return false;
     }
 
-    return cursor_move_vertical(cursor, document, cursor->row + 1);
+    return cursor_move_vertical(cursor, document, cursor->row + 1, tab_width);
 }
 
 /*
  * Move the cursor upward by one visible page while preserving its preferred
- * logical column.
+ * visual column.
  *
  * Parameters:
  *   cursor    - the cursor to move.
@@ -294,7 +330,7 @@ bool cursor_move_down(Cursor *cursor, const Document *document)
  *   true if the cursor position changed, false for invalid arguments or if
  *   the cursor is already at the first row.
  */
-bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_rows)
+bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_rows, size_t tab_width)
 {
     size_t target_row;
 
@@ -310,12 +346,12 @@ bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_r
         return false;
     }
 
-    return cursor_move_vertical(cursor, document, target_row);
+    return cursor_move_vertical(cursor, document, target_row, tab_width);
 }
 
 /*
  * Move the cursor downward by one visible page while preserving its preferred
- * logical column.
+ * visual column.
  *
  * Parameters:
  *   cursor    - the cursor to move.
@@ -326,7 +362,7 @@ bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_r
  *   true if the cursor position changed, false for invalid arguments or if
  *   the cursor is already at the last row.
  */
-bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page_rows)
+bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page_rows, size_t tab_width)
 {
     size_t remaining_rows;
     size_t target_row;
@@ -348,5 +384,5 @@ bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page
         target_row = cursor->row + page_rows;
     }
 
-    return cursor_move_vertical(cursor, document, target_row);
+    return cursor_move_vertical(cursor, document, target_row, tab_width);
 }

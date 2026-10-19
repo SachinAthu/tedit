@@ -2,7 +2,7 @@
 
 ## Project Status
 
-**Active — Volume X implementation; Chapter 53 keyboard integration complete**
+**Active — Volume X implementation; Chapter 53 complete, visual-column navigation refinement added**
 
 Chapters 45–51, Chapter 52 sections 52.2–52.8, and Chapter 53 sections 53.2–53.11 are implemented in the current source snapshot. The interface includes a bottom Status Bar, a white Message Bar with black text, filename editing with cursor navigation and Delete, and dirty-quit confirmation. Ctrl-S saves named documents to their current path and opens filename entry for unnamed documents; no separate Save As command is implemented. Debug and warning-clean builds pass all eight CTest targets, and pseudo-terminal checks cover the latest interface flows.
 
@@ -293,7 +293,7 @@ Next: Chapter 53.4 — Delete-Key Editing.
 - [x] Added Cursor operations for page-sized vertical movement.
 - [x] Page distance comes from `Renderer.document_rows` and is supplied by the Event Loop.
 - [x] Mapped Page Up and Page Down input events to explicit Editor Commands.
-- [x] Preserved the preferred logical column across page movement, including short destination lines.
+- [x] Preserves the preferred visual column across page movement, including short destination lines; ADR-034 supersedes the original logical-column policy for vertical navigation.
 - [x] Added command and input-pipeline regression tests for boundaries, no-op behavior, Dirty Flag preservation, and terminal sequences.
 - [x] Debug warning-clean build passes with `-Wall -Wextra -Wpedantic -Werror`.
 - [x] All eight CTest targets pass.
@@ -386,3 +386,12 @@ Chapter 53.11 — Resulting Implementation State is complete. Next: Chapter 54 �
 - [x] Pseudo-terminal workflow verified exact saved bytes `bc\t\n`, exit status 0, and alternate-screen restoration.
 
 Next: Chapter 54 — Hardening the Editor.
+
+
+### Follow-up — Status Bar and Vertical Navigation
+
+- [x] Status Bar reports line, logical column, and visual display column explicitly.
+- [x] Added shared `src/text/text_layout.{h,c}` calculations for tab stops and Unicode code-point widths.
+- [x] Vertical cursor and page movement preserve a preferred visual column across tabbed, wide-character, and short lines.
+- [x] Added regression coverage for a status position after a tab and vertical movement across tabbed lines with a short-line round trip.
+- [ ] Continue with Chapter 54 hardening work after this focused refinement.

@@ -149,23 +149,68 @@ static void test_cursor_vertical_movement_preserves_preferred_column(void)
 
     cursor_init(&cursor);
     assert(cursor_set_position(&cursor, &document, 0, 5));
-    assert(cursor_move_down(&cursor, &document));
+    assert(cursor_move_down(&cursor, &document, DEFAULT_TAB_WIDTH));
     assert(cursor.row == 1 && cursor.column == 2);
     assert(cursor.preferred_column == 5);
-    assert(cursor_move_down(&cursor, &document));
+    assert(cursor_move_down(&cursor, &document, DEFAULT_TAB_WIDTH));
     assert(cursor.row == 2 && cursor.column == 0);
     assert(cursor.preferred_column == 5);
-    assert(cursor_move_down(&cursor, &document));
+    assert(cursor_move_down(&cursor, &document, DEFAULT_TAB_WIDTH));
     assert(cursor.row == 3 && cursor.column == 5);
     assert(cursor.preferred_column == 5);
-    assert(cursor_move_up(&cursor, &document));
+    assert(cursor_move_up(&cursor, &document, DEFAULT_TAB_WIDTH));
     assert(cursor.row == 2 && cursor.column == 0);
-    assert(cursor_move_up(&cursor, &document));
+    assert(cursor_move_up(&cursor, &document, DEFAULT_TAB_WIDTH));
     assert(cursor.row == 1 && cursor.column == 2);
-    assert(cursor_move_up(&cursor, &document));
+    assert(cursor_move_up(&cursor, &document, DEFAULT_TAB_WIDTH));
     assert(cursor.row == 0 && cursor.column == 5);
-    assert(!cursor_move_up(&cursor, &document));
-    assert(!cursor_move_down(NULL, &document));
+    assert(!cursor_move_up(&cursor, &document, DEFAULT_TAB_WIDTH));
+    assert(!cursor_move_down(NULL, &document, DEFAULT_TAB_WIDTH));
+
+    document_destroy(&document);
+}
+
+/* Vertical movement preserves the visual column across tab expansion. */
+static void test_cursor_vertical_movement_preserves_visual_column(void)
+{
+    Document document;
+    Cursor cursor;
+
+    assert(document_init(&document));
+    /* Row 0: a<TAB>bcdef; logical column 3 has visual column 5. */
+    assert(document_insert_character(&document, 0, 0, 'a'));
+    assert(document_insert_character(&document, 0, 1, (uint32_t)'\t'));
+    assert(document_insert_character(&document, 0, 2, 'b'));
+    assert(document_insert_character(&document, 0, 3, 'c'));
+    assert(document_insert_character(&document, 0, 4, 'd'));
+    assert(document_insert_character(&document, 0, 5, 'e'));
+    assert(document_insert_character(&document, 0, 6, 'f'));
+    assert(document_split_line(&document, 0, 7));
+
+    /* Row 1: 12<TAB>3456; visual column 5 maps to logical column 4. */
+    assert(document_insert_character(&document, 1, 0, '1'));
+    assert(document_insert_character(&document, 1, 1, '2'));
+    assert(document_insert_character(&document, 1, 2, (uint32_t)'\t'));
+    assert(document_insert_character(&document, 1, 3, '3'));
+    assert(document_insert_character(&document, 1, 4, '4'));
+    assert(document_insert_character(&document, 1, 5, '5'));
+    assert(document_insert_character(&document, 1, 6, '6'));
+    assert(document_split_line(&document, 1, 7));
+    assert(document_insert_character(&document, 2, 0, 'x'));
+
+    cursor_init(&cursor);
+    assert(cursor_set_position(&cursor, &document, 0, 3));
+    assert(cursor_move_down(&cursor, &document, DEFAULT_TAB_WIDTH));
+    assert(cursor.row == 1 && cursor.column == 4);
+    assert(cursor.preferred_visual_column == 5);
+    assert(cursor_move_down(&cursor, &document, DEFAULT_TAB_WIDTH));
+    assert(cursor.row == 2 && cursor.column == 1);
+    assert(cursor.preferred_visual_column == 5);
+    assert(cursor_move_up(&cursor, &document, DEFAULT_TAB_WIDTH));
+    assert(cursor.row == 1 && cursor.column == 4);
+    assert(cursor.preferred_visual_column == 5);
+    assert(cursor_move_up(&cursor, &document, DEFAULT_TAB_WIDTH));
+    assert(cursor.row == 0 && cursor.column == 3);
 
     document_destroy(&document);
 }
@@ -184,7 +229,7 @@ static void test_horizontal_movement_resets_preferred_column(void)
 
     cursor_init(&cursor);
     assert(cursor_set_position(&cursor, &document, 0, 2));
-    assert(cursor_move_down(&cursor, &document));
+    assert(cursor_move_down(&cursor, &document, DEFAULT_TAB_WIDTH));
     assert(cursor.column == 1 && cursor.preferred_column == 2);
     assert(cursor_move_left(&cursor));
     assert(cursor.column == 0 && cursor.preferred_column == 0);
@@ -436,7 +481,6 @@ static void test_renderer_uses_viewport_offsets(void)
     editor_state_destroy(&state);
 }
 
-
 static void test_tab_width_and_visual_cursor_column(void)
 {
     EditorState state;
@@ -487,7 +531,6 @@ static void test_tab_width_and_visual_cursor_column(void)
     renderer_destroy(&renderer);
     editor_state_destroy(&state);
 }
-
 
 /* Wide code points occupy two cells; combining marks attach to their base. */
 static void test_unicode_visual_width_and_combining_marks(void)
@@ -555,13 +598,14 @@ static void test_renderer_draws_status_bar(void)
     {
         assert(document_insert_character(&state.document, 1, index, (uint32_t)'x'));
     }
-    assert(renderer_init(&renderer, 5, 40));
+    assert(document_insert_character(&state.document, 1, 2, (uint32_t)'\t'));
+    assert(renderer_init(&renderer, 5, 64));
     state.file_path = malloc(sizeof("notes.txt"));
     assert(state.file_path != NULL);
     memcpy(state.file_path, "notes.txt", sizeof("notes.txt"));
     state.is_dirty = true;
     state.cursor.row = 1;
-    state.cursor.column = 4;
+    state.cursor.column = 3;
 
     /* Capture the renderer output so the test does not write control bytes. */
     int output_pipe[2];
@@ -586,7 +630,7 @@ static void test_renderer_draws_status_bar(void)
     assert(cell != NULL && cell->code_point == '+');
 
     /* Cursor information is right-aligned and uses one-based coordinates. */
-    const char expected_right[] = "Ln 2, Col 5";
+    const char expected_right[] = "Ln 2, Col 4, Visual 5";
     size_t right_start = renderer.screen_buffer.columns - (sizeof(expected_right) - 1);
     for (size_t index = 0; index < sizeof(expected_right) - 1; ++index)
     {
@@ -786,7 +830,7 @@ static void test_cursor_and_viewport_remain_synchronized_during_scrolling(void)
     assert(cursor_set_position(&state.cursor, &state.document, 0, 0));
     for (row = 1; row < state.document.line_count; ++row)
     {
-        assert(cursor_move_down(&state.cursor, &state.document));
+        assert(cursor_move_down(&state.cursor, &state.document, state.configuration.tab_width));
         assert(viewport_ensure_cursor_visible(&state.viewport,
                                               state.cursor.row,
                                               state.cursor.column,
@@ -797,7 +841,7 @@ static void test_cursor_and_viewport_remain_synchronized_during_scrolling(void)
 
     for (row = state.document.line_count - 1; row > 0; --row)
     {
-        assert(cursor_move_up(&state.cursor, &state.document));
+        assert(cursor_move_up(&state.cursor, &state.document, state.configuration.tab_width));
         assert(viewport_ensure_cursor_visible(&state.viewport,
                                               state.cursor.row,
                                               state.cursor.column,
@@ -914,6 +958,7 @@ int main(void)
     test_cursor_horizontal_movement();
     test_cursor_home_and_end();
     test_cursor_vertical_movement_preserves_preferred_column();
+    test_cursor_vertical_movement_preserves_visual_column();
     test_horizontal_movement_resets_preferred_column();
     test_dirty_flag_initial_state();
     test_document_split_line();

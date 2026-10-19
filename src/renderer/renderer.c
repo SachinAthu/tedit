@@ -1,11 +1,10 @@
 #define _XOPEN_SOURCE 700
-
 #include "renderer.h"
+#include "text/text_layout.h"
 
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <wchar.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -48,9 +47,6 @@ static size_t renderer_utf8_length(uint32_t code_point);
 static size_t renderer_encode_utf8(uint32_t code_point, char output[4]);
 
 static size_t renderer_tab_advance(size_t visual_column, size_t tab_width);
-
-static bool renderer_code_point_in_range(uint32_t code_point, uint32_t first, uint32_t last);
-
 static int renderer_code_point_width(uint32_t code_point);
 
 /*
@@ -124,13 +120,11 @@ void renderer_destroy(Renderer *renderer)
 bool renderer_cursor_visual_column(const EditorState *state, size_t *visual_column)
 {
     const DocumentLine *line;
-    size_t column = 0;
 
     if (state == NULL || visual_column == NULL || state->configuration.tab_width == 0)
     {
         return false;
     }
-
     if (state->document.line_count == 0)
     {
         if (state->cursor.row != 0 || state->cursor.column != 0)
@@ -146,43 +140,19 @@ bool renderer_cursor_visual_column(const EditorState *state, size_t *visual_colu
     }
 
     line = &state->document.lines[state->cursor.row];
+    return text_layout_line_visual_column(line, state->cursor.column,
+                                          state->configuration.tab_width,
+                                          visual_column);
+}
 
-    if (state->cursor.column > line->length)
-    {
-        return false;
-    }
+static size_t renderer_tab_advance(size_t visual_column, size_t tab_width)
+{
+    return tab_width - (visual_column % tab_width);
+}
 
-    for (size_t index = 0; index < state->cursor.column; ++index)
-    {
-        size_t advance;
-
-        if (line->data[index] == (uint32_t)'\t')
-        {
-            advance = renderer_tab_advance(column, state->configuration.tab_width);
-        }
-        else
-        {
-            int width = renderer_code_point_width(line->data[index]);
-            if (width < 0)
-            {
-                width = 1;
-            }
-            if (width == 0 && column == 0)
-            {
-                /* A leading combining mark is displayed with a dotted circle. */
-                width = 1;
-            }
-            advance = (size_t)width;
-        }
-        if (column > SIZE_MAX - advance)
-        {
-            return false;
-        }
-        column += advance;
-    }
-
-    *visual_column = column;
-    return true;
+static int renderer_code_point_width(uint32_t code_point)
+{
+    return text_layout_code_point_width(code_point);
 }
 
 bool renderer_render(Renderer *renderer, const EditorState *state)
@@ -311,7 +281,6 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
         size_t visual_column = 0;
         size_t previous_cell_column = 0;
         bool has_previous_cell = false;
-
         for (size_t document_column = 0; document_column < line->length; ++document_column)
         {
             const uint32_t code_point = line->data[document_column];
@@ -320,23 +289,21 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
             if (code_point == (uint32_t)'\t')
             {
                 advance = renderer_tab_advance(visual_column, state->configuration.tab_width);
-
                 if (visual_column > SIZE_MAX - advance)
                 {
                     return false;
                 }
-
                 for (size_t offset = 0; offset < advance; ++offset)
                 {
                     const size_t cell_column = visual_column + offset;
-
-                    if (cell_column >= state->viewport.viewport_column && cell_column - state->viewport.viewport_column < renderer->screen_buffer.columns &&
-                        !screen_buffer_set(&renderer->screen_buffer, screen_row, cell_column - state->viewport.viewport_column, (uint32_t)' '))
+                    if (cell_column >= state->viewport.viewport_column &&
+                        cell_column - state->viewport.viewport_column < renderer->screen_buffer.columns &&
+                        !screen_buffer_set(&renderer->screen_buffer, screen_row,
+                                           cell_column - state->viewport.viewport_column, (uint32_t)' '))
                     {
                         return false;
                     }
                 }
-
                 previous_cell_column = visual_column + advance - 1;
                 has_previous_cell = true;
             }
@@ -344,59 +311,53 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
             {
                 int width = renderer_code_point_width(code_point);
                 uint32_t display_code_point = code_point;
-
                 if (width < 0)
                 {
                     width = 1;
                     display_code_point = (uint32_t)'?';
                 }
-
                 if (width == 0)
                 {
                     if (has_previous_cell)
                     {
                         if (previous_cell_column >= state->viewport.viewport_column &&
                             previous_cell_column - state->viewport.viewport_column < renderer->screen_buffer.columns &&
-                            !screen_buffer_append_combining(&renderer->screen_buffer, screen_row, previous_cell_column - state->viewport.viewport_column, code_point))
+                            !screen_buffer_append_combining(&renderer->screen_buffer, screen_row,
+                                                            previous_cell_column - state->viewport.viewport_column,
+                                                            code_point))
                         {
                             return false;
                         }
-
                         continue;
                     }
-
                     display_code_point = UINT32_C(0x25CC); /* dotted circle */
                     width = 1;
                 }
 
                 advance = (size_t)width;
-
                 if (visual_column > SIZE_MAX - advance)
                 {
                     return false;
                 }
-
                 if (visual_column >= state->viewport.viewport_column &&
                     visual_column - state->viewport.viewport_column < renderer->screen_buffer.columns &&
-                    advance <= renderer->screen_buffer.columns - (visual_column - state->viewport.viewport_column))
+                    advance <= renderer->screen_buffer.columns -
+                                   (visual_column - state->viewport.viewport_column))
                 {
                     const size_t cell_column = visual_column - state->viewport.viewport_column;
-
                     if (!screen_buffer_set(&renderer->screen_buffer, screen_row, cell_column, display_code_point))
                     {
                         return false;
                     }
-
                     if (advance == 2 &&
                         !screen_buffer_set_continuation(&renderer->screen_buffer, screen_row, cell_column + 1))
                     {
                         return false;
                     }
-
                     previous_cell_column = visual_column;
                     has_previous_cell = true;
-
-                    if (display_code_point == UINT32_C(0x25CC) && !screen_buffer_append_combining(&renderer->screen_buffer, screen_row, cell_column, code_point))
+                    if (display_code_point == UINT32_C(0x25CC) &&
+                        !screen_buffer_append_combining(&renderer->screen_buffer, screen_row, cell_column, code_point))
                     {
                         return false;
                     }
@@ -412,17 +373,17 @@ static bool renderer_build_frame(Renderer *renderer, const EditorState *state)
             {
                 return false;
             }
-
             visual_column += advance;
-
-            if (visual_column >= state->viewport.viewport_column && visual_column - state->viewport.viewport_column >= renderer->screen_buffer.columns)
+            if (visual_column >= state->viewport.viewport_column &&
+                visual_column - state->viewport.viewport_column >= renderer->screen_buffer.columns)
             {
                 break;
             }
         }
     }
 
-    return renderer_draw_status_bar(renderer, state) && renderer_draw_message_bar(renderer, state);
+    return renderer_draw_status_bar(renderer, state) &&
+           renderer_draw_message_bar(renderer, state);
 }
 
 /*
@@ -495,8 +456,14 @@ static bool renderer_draw_status_bar(Renderer *renderer, const EditorState *stat
     path_length = strlen(path);
     suffix = state->is_dirty ? " [+]" : "";
     suffix_length = strlen(suffix);
-    right_length = snprintf(right, sizeof(right), "Ln %zu, Col %zu",
-                            state->cursor.row + 1, state->cursor.column + 1);
+    size_t visual_column;
+    if (!renderer_cursor_visual_column(state, &visual_column) || visual_column == SIZE_MAX)
+    {
+        return false;
+    }
+    right_length = snprintf(right, sizeof(right), "Ln %zu, Col %zu, Visual %zu",
+                            state->cursor.row + 1, state->cursor.column + 1,
+                            visual_column + 1);
     if (right_length < 0 || (size_t)right_length >= sizeof(right))
     {
         return false;
@@ -800,25 +767,19 @@ static bool renderer_write_frame(Renderer *renderer)
             {
                 continue;
             }
-
             size_t encoded_length = renderer_utf8_length(cell->code_point);
-
             if (encoded_length == 0 || frame_length > SIZE_MAX - encoded_length)
             {
                 return false;
             }
-
             frame_length += encoded_length;
-
             for (size_t mark = 0; mark < cell->combining_count; ++mark)
             {
                 const size_t mark_length = renderer_utf8_length(cell->combining_code_points[mark]);
-
                 if (mark_length == 0 || frame_length > SIZE_MAX - mark_length)
                 {
                     return false;
                 }
-
                 frame_length += mark_length;
             }
         }
@@ -872,9 +833,7 @@ static bool renderer_write_frame(Renderer *renderer)
             {
                 continue;
             }
-
             char encoded[4];
-
             size_t encoded_length = renderer_encode_utf8(cell->code_point, encoded);
 
             if (encoded_length == 0)
@@ -884,17 +843,14 @@ static bool renderer_write_frame(Renderer *renderer)
 
             memcpy(renderer->output_buffer + position, encoded, encoded_length);
             position += encoded_length;
-
             for (size_t mark = 0; mark < cell->combining_count; ++mark)
             {
                 char mark_bytes[4];
                 const size_t mark_length = renderer_encode_utf8(cell->combining_code_points[mark], mark_bytes);
-
                 if (mark_length == 0)
                 {
                     return false;
                 }
-
                 memcpy(renderer->output_buffer + position, mark_bytes, mark_length);
                 position += mark_length;
             }
@@ -1078,67 +1034,4 @@ static size_t renderer_encode_utf8(uint32_t code_point, char output[4])
     }
 
     return length;
-}
-
-static size_t renderer_tab_advance(size_t visual_column, size_t tab_width)
-{
-    return tab_width - (visual_column % tab_width);
-}
-
-static bool renderer_code_point_in_range(uint32_t code_point, uint32_t first, uint32_t last)
-{
-    return code_point >= first && code_point <= last;
-}
-
-static int renderer_code_point_width(uint32_t code_point)
-{
-    int width;
-
-    if (code_point > UINT32_C(0x10FFFF) || (code_point >= UINT32_C(0xD800) && code_point <= UINT32_C(0xDFFF)))
-    {
-        return -1;
-    }
-
-    width = wcwidth((wchar_t)code_point);
-    if (width >= 0)
-    {
-        return width;
-    }
-
-    /* Deterministic fallback for systems running in the POSIX/C locale. */
-    if (renderer_code_point_in_range(code_point, 0x0300, 0x036F) ||
-        renderer_code_point_in_range(code_point, 0x0483, 0x0489) ||
-        renderer_code_point_in_range(code_point, 0x0591, 0x05BD) ||
-        renderer_code_point_in_range(code_point, 0x05BF, 0x05BF) ||
-        renderer_code_point_in_range(code_point, 0x05C1, 0x05C2) ||
-        renderer_code_point_in_range(code_point, 0x0610, 0x061A) ||
-        renderer_code_point_in_range(code_point, 0x064B, 0x065F) ||
-        renderer_code_point_in_range(code_point, 0x0670, 0x0670) ||
-        renderer_code_point_in_range(code_point, 0x06D6, 0x06ED) ||
-        renderer_code_point_in_range(code_point, 0x1AB0, 0x1AFF) ||
-        renderer_code_point_in_range(code_point, 0x1DC0, 0x1DFF) ||
-        renderer_code_point_in_range(code_point, 0x20D0, 0x20FF) ||
-        renderer_code_point_in_range(code_point, 0xFE00, 0xFE0F) ||
-        renderer_code_point_in_range(code_point, 0xFE20, 0xFE2F) ||
-        renderer_code_point_in_range(code_point, 0xE0100, 0xE01EF))
-    {
-        return 0;
-    }
-
-    if (renderer_code_point_in_range(code_point, 0x1100, 0x115F) ||
-        renderer_code_point_in_range(code_point, 0x2329, 0x232A) ||
-        renderer_code_point_in_range(code_point, 0x2E80, 0xA4CF) ||
-        renderer_code_point_in_range(code_point, 0xAC00, 0xD7A3) ||
-        renderer_code_point_in_range(code_point, 0xF900, 0xFAFF) ||
-        renderer_code_point_in_range(code_point, 0xFE10, 0xFE19) ||
-        renderer_code_point_in_range(code_point, 0xFE30, 0xFE6F) ||
-        renderer_code_point_in_range(code_point, 0xFF00, 0xFF60) ||
-        renderer_code_point_in_range(code_point, 0xFFE0, 0xFFE6) ||
-        renderer_code_point_in_range(code_point, 0x1F300, 0x1FAFF) ||
-        renderer_code_point_in_range(code_point, 0x20000, 0x3FFFD))
-    {
-        return 2;
-    }
-
-    return 1;
 }

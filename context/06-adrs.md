@@ -583,3 +583,26 @@ Trade-off:
 In-process plugins provide extension, not fault or security isolation: a faulty or malicious plugin can crash or compromise the editor. Accepting trusted in-process plugins is simpler and faster but shifts the burden of trust to the user, who must install only trusted extensions. A small ABI surface, explicit compatibility checks, and a controlled lifecycle contain the coupling cost, but extensibility still adds real maintenance overhead — which is why plugins remain deferred until independent extension is worth the cost.
 
 First referenced: Chapter 39
+
+
+---
+
+# ADR-034
+
+Visual-Column Preservation for Vertical Navigation
+
+Decision:
+
+Keep `Cursor.row` and `Cursor.column` as zero-based logical Document coordinates, where each stored Unicode code point—including TAB—occupies one logical column. During vertical movement, preserve a separate preferred visual display column. Map that visual target to the nearest valid logical code-point boundary on the destination line, accounting for configured tab stops and code-point display widths. If a line is shorter, clamp the actual cursor position while retaining the preferred visual column for subsequent vertical movement. Show both the one-based logical column and one-based visual display column in the Status Bar.
+
+Reason:
+
+A tab or wide Unicode code point can occupy multiple terminal columns while remaining one logical Document code point. Preserving only the logical column therefore causes vertical movement to drift visually, and showing only a logical column in the Status Bar hides the cause. A shared text-layout utility keeps Renderer and Cursor calculations consistent without making Cursor depend on Renderer or changing the stored text.
+
+Trade-off:
+
+The Cursor must maintain additional preferred-visual state and map visual targets back to valid logical boundaries. A target inside a tab expansion or wide character cannot be represented exactly; this implementation selects the nearest boundary and resolves ties toward the boundary before the character. This is accepted to preserve stable visual intent while retaining the existing Document model.
+
+Supersedes the preferred-logical-column aspect of ADR-014 for vertical navigation; the logical Document coordinate model remains unchanged.
+
+First referenced: Chapter 54 follow-up — Status Bar and Vertical Navigation Refinement

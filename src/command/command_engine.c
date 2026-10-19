@@ -620,16 +620,16 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
         changed = cursor_move_right(&state->cursor, &state->document);
         break;
     case EDITOR_COMMAND_MOVE_UP:
-        changed = cursor_move_up(&state->cursor, &state->document);
+        changed = cursor_move_up(&state->cursor, &state->document, state->configuration.tab_width);
         break;
     case EDITOR_COMMAND_MOVE_DOWN:
-        changed = cursor_move_down(&state->cursor, &state->document);
+        changed = cursor_move_down(&state->cursor, &state->document, state->configuration.tab_width);
         break;
     case EDITOR_COMMAND_PAGE_UP:
-        changed = cursor_move_page_up(&state->cursor, &state->document, command->page_rows);
+        changed = cursor_move_page_up(&state->cursor, &state->document, command->page_rows, state->configuration.tab_width);
         break;
     case EDITOR_COMMAND_PAGE_DOWN:
-        changed = cursor_move_page_down(&state->cursor, &state->document, command->page_rows);
+        changed = cursor_move_page_down(&state->cursor, &state->document, command->page_rows, state->configuration.tab_width);
         break;
     case EDITOR_COMMAND_MOVE_HOME:
         changed = cursor_move_home(&state->cursor);
@@ -645,6 +645,23 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
         break;
     default:
         return false;
+    }
+
+    switch (command->type)
+    {
+    case EDITOR_COMMAND_INSERT_CHARACTER:
+    case EDITOR_COMMAND_INSERT_TAB:
+    case EDITOR_COMMAND_BACKSPACE:
+    case EDITOR_COMMAND_INSERT_NEWLINE:
+    case EDITOR_COMMAND_MOVE_LEFT:
+    case EDITOR_COMMAND_MOVE_RIGHT:
+    case EDITOR_COMMAND_MOVE_HOME:
+    case EDITOR_COMMAND_MOVE_END:
+    case EDITOR_COMMAND_DELETE_CHARACTER:
+        state->cursor.preferred_visual_column_valid = false;
+        break;
+    default:
+        break;
     }
 
     *redraw = *redraw || changed;

@@ -11,15 +11,19 @@
  *
  *   - row:             which line the cursor is on (zero-based).
  *   - column:          which code point within that line (zero-based).
- *   - preferred_column: the column the user last chose horizontally. It is
- *                       remembered so that moving up or down across lines of
- *                       different lengths keeps the cursor at a sensible spot.
+ *   - preferred_column: the logical column most recently chosen horizontally.
+ *   - preferred_visual_column: the display column preserved during vertical
+ *                               movement across tabs and Unicode widths.
+ *   - preferred_visual_column_valid: whether the visual preference matches the
+ *                                    current logical cursor position.
  */
 typedef struct
 {
     size_t row;
     size_t column;
     size_t preferred_column;
+    size_t preferred_visual_column;
+    bool preferred_visual_column_valid;
 } Cursor;
 
 /*
@@ -108,8 +112,11 @@ bool cursor_move_home(Cursor *cursor);
  */
 bool cursor_move_end(Cursor *cursor, const Document *document);
 
+/* Recompute the remembered visual column from the current logical position. */
+bool cursor_update_preferred_visual_column(Cursor *cursor, const Document *document, size_t tab_width);
+
 /*
- * Move the cursor up one line, keeping the preferred column when possible.
+ * Move the cursor up one line, preserving the preferred visual column.
  *
  * Parameters:
  *   cursor   - the cursor to move.
@@ -118,10 +125,11 @@ bool cursor_move_end(Cursor *cursor, const Document *document);
  * Returns:
  *   true if the cursor moved up, false if it is already on the first line.
  */
-bool cursor_move_up(Cursor *cursor, const Document *document);
+bool cursor_move_up(Cursor *cursor, const Document *document, size_t tab_width);
 
 /*
- * Move the cursor up by a page-sized number of logical lines.
+ * Move the cursor up by a page-sized number of logical lines while preserving
+ * the preferred visual column.
  *
  * Parameters:
  *   cursor    - the cursor to move.
@@ -132,10 +140,11 @@ bool cursor_move_up(Cursor *cursor, const Document *document);
  *   true if the cursor position changed, false for invalid arguments or when
  *   the cursor is already at the top boundary.
  */
-bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_rows);
+bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_rows, size_t tab_width);
 
 /*
- * Move the cursor down by a page-sized number of logical lines.
+ * Move the cursor down by a page-sized number of logical lines while preserving
+ * the preferred visual column.
  *
  * Parameters:
  *   cursor    - the cursor to move.
@@ -146,10 +155,10 @@ bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_r
  *   true if the cursor position changed, false for invalid arguments or when
  *   the cursor is already at the bottom boundary.
  */
-bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page_rows);
+bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page_rows, size_t tab_width);
 
 /*
- * Move the cursor down one line, keeping the preferred column when possible.
+ * Move the cursor down one line, preserving the preferred visual column.
  *
  * Parameters:
  *   cursor   - the cursor to move.
@@ -158,6 +167,6 @@ bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page
  * Returns:
  *   true if the cursor moved down, false if it is already on the last line.
  */
-bool cursor_move_down(Cursor *cursor, const Document *document);
+bool cursor_move_down(Cursor *cursor, const Document *document, size_t tab_width);
 
 #endif

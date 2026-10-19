@@ -115,12 +115,15 @@ The Core Layer does not depend on either the Application Layer or the Platform L
 ### Cursor
 
 - Tracks the logical position within the document where the next editing operation occurs.
-- Maintains both a document position (row, column) and a screen position.
+- Keeps logical code-point coordinates separate from the preferred visual display column used during vertical navigation.
+- Uses the shared text-layout utility to map tabs and Unicode display widths to logical cursor boundaries; it does not depend on Renderer.
 
 ### Renderer
 
 - Reads the current Editor State.
 - Generates a complete visual frame (visible lines, status bar, message bar, cursor).
+- Shows both the logical cursor column and visual display column in the Status Bar.
+- Shares the text-layout utility with Cursor so rendering and vertical navigation use consistent display widths.
 - Performs no editing operations and does not modify the Document.
 - Follows the full-screen redraw strategy (ADR-002).
 

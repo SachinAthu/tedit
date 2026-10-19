@@ -15,3 +15,4 @@ Chapter 53.11 verification: fresh Debug and warning-clean builds passed all eigh
 ## Notes
 
 This file records unresolved implementation problems discovered during development. Resolved issues should not remain here; significant historical information belongs in Git history or implementation notes.
+
