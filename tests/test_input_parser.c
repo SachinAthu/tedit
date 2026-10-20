@@ -256,6 +256,74 @@ static void test_utf8_scalar_boundaries_and_recovery(void)
     assert(event.type == INPUT_EVENT_CHARACTER && event.character == 's');
 }
 
+
+static void test_malformed_csi_control_recovery(void)
+{
+    InputParser parser;
+    InputEvent event;
+
+    input_parser_init(&parser);
+
+    /* Ctrl-S must not be swallowed by an incomplete numeric CSI sequence. */
+    event = feed(&parser, 0x1B);
+    event = feed(&parser, '[');
+    event = feed(&parser, '3');
+    assert(event.type == INPUT_EVENT_NONE);
+    event = feed(&parser, 0x13);
+    assert(event.type == INPUT_EVENT_CTRL_S);
+    assert(!input_parser_is_waiting(&parser));
+
+    event = feed(&parser, 'x');
+    assert(event.type == INPUT_EVENT_CHARACTER && event.character == 'x');
+
+    /* A fresh Escape byte restarts parsing after a malformed CSI prefix. */
+    event = feed(&parser, 0x1B);
+    event = feed(&parser, '[');
+    event = feed(&parser, 0x1B);
+    assert(event.type == INPUT_EVENT_NONE);
+    assert(input_parser_is_waiting(&parser));
+    assert(input_parser_timeout(&parser, &event));
+    assert(event.type == INPUT_EVENT_ESCAPE);
+    assert(!input_parser_is_waiting(&parser));
+}
+
+static void test_oversized_csi_parameter_recovery(void)
+{
+    InputParser parser;
+    InputEvent event;
+    const char *digits = "999999999999999999999999999999";
+    size_t i;
+
+    input_parser_init(&parser);
+    event = feed(&parser, 0x1B);
+    event = feed(&parser, '[');
+
+    for (i = 0; digits[i] != '\0'; ++i)
+    {
+        event = feed(&parser, (unsigned char)digits[i]);
+        assert(event.type == INPUT_EVENT_NONE);
+    }
+
+    event = feed(&parser, '~');
+    assert(event.type == INPUT_EVENT_NONE);
+    assert(!input_parser_is_waiting(&parser));
+
+    event = feed(&parser, 'r');
+    assert(event.type == INPUT_EVENT_CHARACTER && event.character == 'r');
+}
+
+static void test_null_arguments_are_rejected(void)
+{
+    InputParser parser;
+    InputEvent event;
+
+    input_parser_init(&parser);
+    assert(!input_parser_feed(NULL, 'x', &event));
+    assert(!input_parser_feed(&parser, 'x', NULL));
+    assert(!input_parser_timeout(NULL, &event));
+    assert(!input_parser_timeout(&parser, NULL));
+}
+
 int main(void)
 {
     test_ascii_and_control_keys();
@@ -265,5 +333,8 @@ int main(void)
     test_utf8_character();
     test_invalid_utf8_recovers();
     test_utf8_scalar_boundaries_and_recovery();
+    test_malformed_csi_control_recovery();
+    test_oversized_csi_parameter_recovery();
+    test_null_arguments_are_rejected();
     return 0;
 }

@@ -119,6 +119,32 @@ bool terminal_init(TerminalState *terminal)
 }
 
 /*
+ * Query the current terminal dimensions.
+ *
+ * Output parameters are only updated when the ioctl succeeds and both
+ * dimensions are nonzero. Keeping the old values on failure lets callers
+ * prepare a resized Renderer transactionally.
+ */
+bool terminal_get_size(size_t *rows, size_t *columns)
+{
+    struct winsize window_size;
+
+    if (rows == NULL || columns == NULL)
+    {
+        return false;
+    }
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &window_size) == -1 ||
+        window_size.ws_row == 0 || window_size.ws_col == 0)
+    {
+        return false;
+    }
+
+    *rows = window_size.ws_row;
+    *columns = window_size.ws_col;
+    return true;
+}
+
+/*
  * Switches the terminal into "raw mode".
  *
  * Normally a terminal waits for you to press Enter (line mode) and echoes what
@@ -219,13 +245,19 @@ void terminal_restore(TerminalState *terminal)
         return;
     }
 
-    /* Reapply the original saved settings.
-     * TCIFLUSH means: discard any typed input we have not read yet.
-     * (void) tells the compiler we are intentionally ignoring the return value. */
-    (void)tcsetattr(STDIN_FILENO, TCIFLUSH, &terminal->original_attributes);
+    /* Restore with a valid tcsetattr action, retrying an interrupted call. */
+    int result;
+    do
+    {
+        result = tcsetattr(STDIN_FILENO, TCSAFLUSH, &terminal->original_attributes);
+    } while (result == -1 && errno == EINTR);
 
-    /* Update our flag to match reality: raw mode is now off. */
-    terminal->raw_mode_enabled = false;
+    /* Keep the flag set if restoration failed so the state does not claim
+     * that the terminal was restored when the operating system rejected it. */
+    if (result == 0)
+    {
+        terminal->raw_mode_enabled = false;
+    }
 }
 
 /*
@@ -287,6 +319,11 @@ bool terminal_enter_alternate_screen(TerminalState *terminal)
  */
 void terminal_leave_alternate_screen(TerminalState *terminal)
 {
+    if (terminal == NULL)
+    {
+        return;
+    }
+
     /* Nothing to undo if we never switched to the alternate screen. */
     if (!terminal->alternate_screen_enabled)
     {

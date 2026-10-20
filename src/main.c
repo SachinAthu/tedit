@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "command/command_engine.h"
 #include "cursor/cursor.h"
 #include "document/document.h"
@@ -9,8 +11,10 @@
 
 #include <errno.h>
 #include <locale.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
 #include <sys/select.h>
 #include <unistd.h>
 
@@ -21,6 +25,77 @@
  * press still feels instant.
  */
 #define ESCAPE_TIMEOUT_MICROSECONDS 50000
+
+/* Signal handlers only set flags; all terminal and allocation work remains in
+ * the ordinary event-loop context, never inside an asynchronous handler. */
+static volatile sig_atomic_t resize_requested = 0;
+static volatile sig_atomic_t termination_requested = 0;
+static struct sigaction previous_winch_action;
+static struct sigaction previous_int_action;
+static struct sigaction previous_term_action;
+static struct sigaction previous_hup_action;
+static bool signal_handlers_installed = false;
+
+static void application_signal_handler(int signal_number)
+{
+    if (signal_number == SIGWINCH)
+    {
+        resize_requested = 1;
+    }
+    else
+    {
+        termination_requested = 1;
+    }
+}
+
+static bool application_install_signal_handlers(void)
+{
+    struct sigaction action;
+
+    memset(&action, 0, sizeof(action));
+    action.sa_handler = application_signal_handler;
+    sigemptyset(&action.sa_mask);
+
+    if (sigaction(SIGWINCH, &action, &previous_winch_action) == -1)
+    {
+        return false;
+    }
+    if (sigaction(SIGINT, &action, &previous_int_action) == -1)
+    {
+        (void)sigaction(SIGWINCH, &previous_winch_action, NULL);
+        return false;
+    }
+    if (sigaction(SIGTERM, &action, &previous_term_action) == -1)
+    {
+        (void)sigaction(SIGINT, &previous_int_action, NULL);
+        (void)sigaction(SIGWINCH, &previous_winch_action, NULL);
+        return false;
+    }
+    if (sigaction(SIGHUP, &action, &previous_hup_action) == -1)
+    {
+        (void)sigaction(SIGTERM, &previous_term_action, NULL);
+        (void)sigaction(SIGINT, &previous_int_action, NULL);
+        (void)sigaction(SIGWINCH, &previous_winch_action, NULL);
+        return false;
+    }
+
+    signal_handlers_installed = true;
+    return true;
+}
+
+static void application_restore_signal_handlers(void)
+{
+    if (!signal_handlers_installed)
+    {
+        return;
+    }
+
+    (void)sigaction(SIGHUP, &previous_hup_action, NULL);
+    (void)sigaction(SIGTERM, &previous_term_action, NULL);
+    (void)sigaction(SIGINT, &previous_int_action, NULL);
+    (void)sigaction(SIGWINCH, &previous_winch_action, NULL);
+    signal_handlers_installed = false;
+}
 
 /*
  * Read a single byte from standard input, waiting at most
@@ -116,6 +191,49 @@ static bool redraw_after_action(Renderer *renderer, EditorState *state)
 }
 
 /*
+ * Rebuild the Renderer for the latest terminal dimensions. A replacement is
+ * allocated first, so allocation failure leaves the existing Renderer valid
+ * for cleanup. The terminal dimensions are committed only after initialization
+ * succeeds.
+ */
+static bool application_handle_resize(TerminalState *terminal, EditorState *state, Renderer *renderer)
+{
+    size_t rows;
+    size_t columns;
+    Renderer replacement;
+
+    if (terminal == NULL || state == NULL || renderer == NULL || !terminal_get_size(&rows, &columns))
+    {
+        return false;
+    }
+
+    if (rows == terminal->rows && columns == terminal->columns)
+    {
+        return true;
+    }
+
+    /* The Renderer needs at least one document row and reserves the last
+     * physical terminal column to avoid delayed-wrap behavior. */
+    if (rows < 4 || columns < 2)
+    {
+        return false;
+    }
+
+    if (!renderer_init(&replacement, rows, columns - 1))
+    {
+        return false;
+    }
+
+    Renderer previous = *renderer;
+    *renderer = replacement;
+    terminal->rows = rows;
+    terminal->columns = columns;
+    renderer_destroy(&previous);
+
+    return redraw_after_action(renderer, state);
+}
+
+/*
  * Run the editor's main loop until the user quits.
  *
  * Each iteration performs the whole pipeline: read one byte, let the Input
@@ -133,13 +251,26 @@ static bool redraw_after_action(Renderer *renderer, EditorState *state)
  * Returns:
  *   true when the user quit normally, false on an unrecoverable error.
  */
-static bool application_event_loop(EditorState *state, Renderer *renderer, const char *save_path)
+static bool application_event_loop(TerminalState *terminal, EditorState *state, Renderer *renderer, const char *save_path)
 {
     InputParser parser;
     input_parser_init(&parser);
 
     while (true)
     {
+        if (termination_requested)
+        {
+            return true;
+        }
+        if (resize_requested)
+        {
+            resize_requested = 0;
+            if (!application_handle_resize(terminal, state, renderer))
+            {
+                return false;
+            }
+        }
+
         unsigned char byte;
         int read_result;
         InputEvent event;
@@ -270,18 +401,25 @@ int main(int argc, char *argv[])
     bool renderer_initialized = false;
     int exit_status = 1;
 
+    if (!application_install_signal_handlers())
+    {
+        return 1;
+    }
     if (!terminal_init(&terminal))
     {
+        application_restore_signal_handlers();
         return 1;
     }
     if (!terminal_enable_raw_mode(&terminal))
     {
         terminal_restore(&terminal);
+        application_restore_signal_handlers();
         return 1;
     }
     if (!terminal_enter_alternate_screen(&terminal))
     {
         terminal_restore(&terminal);
+        application_restore_signal_handlers();
         return 1;
     }
     if (!editor_state_init(&state))
@@ -301,7 +439,8 @@ int main(int argc, char *argv[])
     }
     renderer_initialized = true;
 
-    if (!redraw_after_action(&renderer, &state) || !application_event_loop(&state, &renderer, startup_path))
+    if (!redraw_after_action(&renderer, &state) ||
+        !application_event_loop(&terminal, &state, &renderer, startup_path))
     {
         goto cleanup;
     }
@@ -319,6 +458,7 @@ cleanup:
     }
     terminal_restore(&terminal);
     terminal_leave_alternate_screen(&terminal);
+    application_restore_signal_handlers();
 
     if (startup_load_failed)
     {

@@ -260,6 +260,15 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
         }
         parser->state = INPUT_PARSER_NORMAL;
         parser->csi_parameter = 0;
+
+        /* A control byte can be a real key even if it interrupts a malformed
+         * CSI parameter. Reprocess it after abandoning the incomplete sequence
+         * so Ctrl-S, Ctrl-Q, Escape, and similar keys are not swallowed. */
+        if (byte < 0x20 || byte == 0x7F)
+        {
+            return input_parser_feed(parser, byte, event);
+        }
+
         return true;
     }
 
@@ -272,6 +281,13 @@ bool input_parser_feed(InputParser *parser, unsigned char byte, InputEvent *even
 
     parser->state = INPUT_PARSER_NORMAL;
     parser->csi_parameter = 0;
+
+    /* Do not consume a standalone control key merely because it interrupted
+     * an escape sequence. Start parsing that byte again from NORMAL state. */
+    if (byte < 0x20 || byte == 0x7F)
+    {
+        return input_parser_feed(parser, byte, event);
+    }
 
     if (byte == 'D')
     {

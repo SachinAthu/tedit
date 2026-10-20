@@ -85,6 +85,7 @@ add_executable(test_input_parser tests/test_input_parser.c)
 add_executable(test_input_engine tests/test_input_engine.c)
 add_executable(test_command_engine tests/test_command_engine.c)
 add_executable(test_input_pipeline tests/test_input_pipeline.c)
+add_executable(test_terminal tests/test_terminal.c)
 
 target_link_libraries(test_smoke PRIVATE tedit_core)
 target_link_libraries(test_editing PRIVATE tedit_core)
@@ -94,6 +95,7 @@ target_link_libraries(test_input_parser PRIVATE tedit_core)
 target_link_libraries(test_input_engine PRIVATE tedit_core)
 target_link_libraries(test_command_engine PRIVATE tedit_core)
 target_link_libraries(test_input_pipeline PRIVATE tedit_core)
+target_link_libraries(test_terminal PRIVATE tedit_core)
 
 add_test(NAME smoke COMMAND test_smoke)
 add_test(NAME editing COMMAND test_editing)
@@ -103,6 +105,7 @@ add_test(NAME input_parser COMMAND test_input_parser)
 add_test(NAME input_engine COMMAND test_input_engine)
 add_test(NAME command_engine COMMAND test_command_engine)
 add_test(NAME input_pipeline COMMAND test_input_pipeline)
+add_test(NAME terminal COMMAND test_terminal)
 
 # Test assertions must remain active in Release configurations because tests
 # use assert() to check results and, in some cases, invoke the operation under
@@ -117,6 +120,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         test_input_engine
         test_command_engine
         test_input_pipeline
+        test_terminal
     )
         target_compile_options(${test_target} PRIVATE -UNDEBUG)
     endforeach()

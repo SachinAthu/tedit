@@ -47,6 +47,9 @@ typedef struct
  */
 bool terminal_init(TerminalState *terminal);
 
+/* Query current terminal dimensions without changing TerminalState. */
+bool terminal_get_size(size_t *rows, size_t *columns);
+
 /*
  * Switch the terminal into "raw mode" so keystrokes arrive one at a time.
  *
