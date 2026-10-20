@@ -41,6 +41,152 @@ static bool line_equals(const DocumentLine *line, const char *text)
     return true;
 }
 
+/* Check the structural invariants owned by the Document module. */
+static void assert_document_invariant(const Document *document)
+{
+    assert(document != NULL);
+    assert(document->line_count <= document->line_capacity);
+    assert((document->lines == NULL) == (document->line_capacity == 0));
+
+    for (size_t row = 0; row < document->line_count; ++row)
+    {
+        const DocumentLine *line = &document->lines[row];
+
+        assert(line->data != NULL);
+        assert(line->capacity > 0);
+        assert(line->length <= line->capacity);
+    }
+}
+
+/* Check that the Cursor denotes a valid insertion position. */
+static void assert_cursor_invariant(const Cursor *cursor, const Document *document)
+{
+    assert(cursor != NULL);
+    assert_document_invariant(document);
+
+    if (document->line_count == 0)
+    {
+        assert(cursor->row == 0);
+        assert(cursor->column == 0);
+        return;
+    }
+
+    assert(cursor->row < document->line_count);
+    assert(cursor->column <= document->lines[cursor->row].length);
+}
+
+/* Check that viewport adjustment leaves the requested Cursor visible. */
+static void assert_cursor_visible(
+    const Viewport *viewport,
+    size_t cursor_row,
+    size_t cursor_visual_column,
+    size_t screen_rows,
+    size_t screen_columns)
+{
+    assert(viewport != NULL);
+    assert(screen_rows > 0);
+    assert(screen_columns > 0);
+    assert(cursor_row >= viewport->viewport_row);
+    assert(cursor_row - viewport->viewport_row < screen_rows);
+    assert(cursor_visual_column >= viewport->viewport_column);
+    assert(cursor_visual_column - viewport->viewport_column < screen_columns);
+}
+
+/* Invalid Document operations must fail without corrupting valid contents. */
+static void test_document_invalid_operations_preserve_invariants(void)
+{
+    Document document;
+    DocumentLine *line;
+
+    assert(document_init(&document));
+    assert(document_insert_character(&document, 0, 0, 'a'));
+    assert(document_insert_character(&document, 0, 1, 'b'));
+    assert(document_split_line(&document, 0, 2));
+    assert(document_insert_character(&document, 1, 0, 'c'));
+    assert_document_invariant(&document);
+
+    assert(!document_insert_character(&document, 2, 0, 'x'));
+    assert(!document_insert_character(&document, 0, 3, 'x'));
+    assert(!document_insert_character(&document, 0, 1, UINT32_C(0xD800)));
+    assert(!document_insert_character(&document, 0, 1, UINT32_C(0x110000)));
+    assert(!document_delete_character(&document, 0, 2));
+    assert(!document_delete_character(&document, 3, 0));
+    assert(!document_split_line(&document, 0, 3));
+    assert(!document_split_line(&document, 3, 0));
+    assert(!document_merge_lines(&document, 1));
+    assert(!document_merge_lines(&document, 99));
+
+    assert_document_invariant(&document);
+    line = document_get_line(&document, 0);
+    assert(line_equals(line, "ab"));
+    line = document_get_line(&document, 1);
+    assert(line_equals(line, "c"));
+
+    document_destroy(&document);
+    assert(document.line_count == 0);
+    assert(document.lines == NULL);
+    assert(document.line_capacity == 0);
+}
+
+/* Failed Cursor placement leaves its previously valid position untouched. */
+static void test_cursor_invalid_positions_preserve_invariants(void)
+{
+    Document document;
+    Cursor cursor;
+    Cursor before;
+
+    assert(document_init(&document));
+    assert(document_insert_character(&document, 0, 0, 'a'));
+    assert(document_insert_character(&document, 0, 1, 'b'));
+    assert(document_split_line(&document, 0, 2));
+    assert(document_insert_character(&document, 1, 0, 'c'));
+
+    cursor_init(&cursor);
+    assert(cursor_set_position(&cursor, &document, 0, 2));
+    assert_cursor_invariant(&cursor, &document);
+    before = cursor;
+
+    assert(!cursor_set_position(&cursor, &document, 2, 0));
+    assert(!cursor_set_position(&cursor, &document, 0, 3));
+    assert(!cursor_set_position(&cursor, &document, 1, 2));
+    assert(!cursor_set_position(NULL, &document, 0, 0));
+    assert(!cursor_set_position(&cursor, NULL, 0, 0));
+
+    assert(cursor.row == before.row);
+    assert(cursor.column == before.column);
+    assert(cursor.preferred_column == before.preferred_column);
+    assert(cursor.preferred_visual_column == before.preferred_visual_column);
+    assert(cursor.preferred_visual_column_valid == before.preferred_visual_column_valid);
+    assert_cursor_invariant(&cursor, &document);
+
+    document_destroy(&document);
+}
+
+/* Cursor visibility remains an invariant after repeated viewport movement. */
+static void test_viewport_visibility_invariant(void)
+{
+    Viewport viewport;
+
+    viewport_init(&viewport);
+    for (size_t row = 0; row < 20; ++row)
+    {
+        for (size_t column = 0; column < 30; ++column)
+        {
+            assert(viewport_ensure_cursor_visible(&viewport, row, column, 4, 7));
+            assert_cursor_visible(&viewport, row, column, 4, 7);
+        }
+    }
+
+    for (size_t row = 20; row > 0; --row)
+    {
+        for (size_t column = 30; column > 0; --column)
+        {
+            assert(viewport_ensure_cursor_visible(&viewport, row - 1, column - 1, 4, 7));
+            assert_cursor_visible(&viewport, row - 1, column - 1, 4, 7);
+        }
+    }
+}
+
 static void test_document_insert_and_delete(void)
 {
     Document document;
@@ -955,6 +1101,9 @@ int main(void)
     test_tab_width_and_visual_cursor_column();
     test_unicode_visual_width_and_combining_marks();
     test_document_insert_and_delete();
+    test_document_invalid_operations_preserve_invariants();
+    test_cursor_invalid_positions_preserve_invariants();
+    test_viewport_visibility_invariant();
     test_cursor_horizontal_movement();
     test_cursor_home_and_end();
     test_cursor_vertical_movement_preserves_preferred_column();

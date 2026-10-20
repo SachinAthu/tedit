@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "file/file.h"
+#include "diagnostics/diagnostics.h"
 
 #include <errno.h>
 #include <stdint.h>
@@ -161,6 +162,40 @@ static bool file_output_code_point(FileOutputBuffer *buffer, uint32_t code_point
 }
 
 /*
+ * Check the Document's active storage before serialization.
+ *
+ * Saving must reject inconsistent metadata before dereferencing the line
+ * array or any line buffer. This is particularly important when the editor
+ * is already recovering from a programming error: a failed save must not
+ * turn corrupt state into an out-of-bounds read.
+ */
+static bool file_document_storage_is_valid(const Document *document)
+{
+    if (document == NULL || document->line_count > document->line_capacity)
+    {
+        return false;
+    }
+
+    if ((document->line_capacity == 0) != (document->lines == NULL))
+    {
+        return false;
+    }
+
+    for (size_t row = 0; row < document->line_count; ++row)
+    {
+        const DocumentLine *line = &document->lines[row];
+
+        if (line->length > line->capacity ||
+            ((line->capacity == 0) != (line->data == NULL)))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/*
  * Serialize an entire Document to the given file descriptor as UTF-8.
  *
  * Every line's code points are encoded, then the line is terminated with LF
@@ -238,8 +273,14 @@ FileSaveResult file_save_document(const char *path, const Document *document)
     FileSaveResult result;
     bool close_succeeded;
 
-    if (path == NULL || path[0] == '\0' || document == NULL || (document->line_count > 0 && document->lines == NULL))
+    if (path == NULL || path[0] == '\0')
     {
+        TEDIT_LOG_ERROR("file-save", "rejected empty or null destination path");
+        return FILE_SAVE_INVALID_ARGUMENT;
+    }
+    if (!file_document_storage_is_valid(document))
+    {
+        TEDIT_LOG_ERROR("file-save", "rejected inconsistent Document storage");
         return FILE_SAVE_INVALID_ARGUMENT;
     }
 

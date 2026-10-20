@@ -1,4 +1,5 @@
 #include "document.h"
+#include "diagnostics/diagnostics.h"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -6,6 +7,33 @@
 
 #define INITIAL_LINE_CAPACITY 16
 #define INITIAL_DOCUMENT_CAPACITY 8
+
+/* Validate owned storage without changing the Document. */
+static bool document_storage_is_valid(const Document *document)
+{
+    if (document == NULL || document->line_count > document->line_capacity)
+    {
+        return false;
+    }
+    if ((document->line_capacity == 0) != (document->lines == NULL))
+    {
+        return false;
+    }
+
+    for (size_t row = 0; row < document->line_count; ++row)
+    {
+        const DocumentLine *line = &document->lines[row];
+        if (line->length > line->capacity ||
+            ((line->capacity == 0) != (line->data == NULL)))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+#define ASSERT_DOCUMENT_VALID(document) TEDIT_ASSERT(document_storage_is_valid(document))
 
 /*
  * Allocate a single line's storage and mark it empty.
@@ -200,6 +228,7 @@ bool document_init(Document *document)
 
     document->line_count = 1;
 
+    ASSERT_DOCUMENT_VALID(document);
     return true;
 }
 
@@ -318,6 +347,7 @@ bool document_insert_character(Document *document, size_t row, size_t column, ui
 
         document->lines[0] = first_line;
         document->line_count = 1;
+        ASSERT_DOCUMENT_VALID(document);
         return true;
     }
 
@@ -343,6 +373,7 @@ bool document_insert_character(Document *document, size_t row, size_t column, ui
     line->data[column] = code_point;
     ++line->length;
 
+    ASSERT_DOCUMENT_VALID(document);
     return true;
 }
 
@@ -372,6 +403,7 @@ bool document_delete_character(Document *document, size_t row, size_t column)
 
     --line->length;
 
+    ASSERT_DOCUMENT_VALID(document);
     return true;
 }
 
@@ -440,6 +472,7 @@ bool document_split_line(Document *document, size_t row, size_t column)
         document->lines[0] = first_line;
         document->lines[1] = second_line;
         document->line_count = 2;
+        ASSERT_DOCUMENT_VALID(document);
         return true;
     }
 
@@ -492,6 +525,7 @@ bool document_split_line(Document *document, size_t row, size_t column)
     ++document->line_count;
     line->length = column;
 
+    ASSERT_DOCUMENT_VALID(document);
     return true;
 }
 
@@ -549,5 +583,6 @@ bool document_merge_lines(Document *document, size_t row)
 
     --document->line_count;
 
+    ASSERT_DOCUMENT_VALID(document);
     return true;
 }

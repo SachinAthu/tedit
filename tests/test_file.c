@@ -143,6 +143,22 @@ static void test_missing_file_preserves_destination(void)
     document_destroy(&document);
 }
 
+static void test_read_failure_preserves_destination_document(void)
+{
+    Document document;
+
+    assert(document_init(&document));
+    assert(document_insert_character(&document, 0, 0, 'q'));
+
+    /* POSIX permits opening a directory, but reading it fails on Linux. */
+    assert(file_load_document("/tmp", &document) == FILE_LOAD_READ_FAILED);
+    assert(document.line_count == 1);
+    assert(document_get_line(&document, 0)->length == 1);
+    assert(document_get_line(&document, 0)->data[0] == (uint32_t)'q');
+
+    document_destroy(&document);
+}
+
 static void test_editor_state_load_resets_cursor_viewport_and_dirty_flag(void)
 {
     char path[] = "/tmp/tedit-state-load-XXXXXX";
@@ -221,6 +237,7 @@ int main(void)
     test_empty_file_has_zero_lines();
     test_invalid_utf8_preserves_destination();
     test_missing_file_preserves_destination();
+    test_read_failure_preserves_destination_document();
     test_editor_state_load_resets_cursor_viewport_and_dirty_flag();
     test_editor_state_failed_load_preserves_state();
 

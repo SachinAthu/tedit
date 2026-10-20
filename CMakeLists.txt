@@ -11,9 +11,22 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+option(
+    TEDIT_ENABLE_DIAGNOSTICS
+    "Enable development-time diagnostic logging"
+    OFF
+)
+
+option(
+    TEDIT_ENABLE_SANITIZERS
+    "Enable AddressSanitizer and UndefinedBehaviorSanitizer"
+    OFF
+)
+
 add_library(
     tedit_core
     STATIC
+    src/diagnostics/diagnostics.c
     src/terminal/terminal.c
     src/input/input_parser.c
     src/input/input_engine.c
@@ -30,6 +43,30 @@ add_library(
 )
 
 target_include_directories(tedit_core PUBLIC src)
+
+if(TEDIT_ENABLE_DIAGNOSTICS)
+    target_compile_definitions(tedit_core PUBLIC TEDIT_ENABLE_DIAGNOSTICS=1)
+endif()
+
+if(TEDIT_ENABLE_SANITIZERS)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(
+            tedit_core
+            PUBLIC
+            -fsanitize=address,undefined
+            -fno-omit-frame-pointer
+        )
+        target_link_options(
+            tedit_core
+            PUBLIC
+            -fsanitize=address,undefined
+        )
+    else()
+        message(FATAL_ERROR
+            "TEDIT_ENABLE_SANITIZERS requires a GCC- or Clang-compatible compiler"
+        )
+    endif()
+endif()
 
 add_executable(
     tedit
@@ -66,3 +103,21 @@ add_test(NAME input_parser COMMAND test_input_parser)
 add_test(NAME input_engine COMMAND test_input_engine)
 add_test(NAME command_engine COMMAND test_command_engine)
 add_test(NAME input_pipeline COMMAND test_input_pipeline)
+
+# Test assertions must remain active in Release configurations because tests
+# use assert() to check results and, in some cases, invoke the operation under
+# test. Production targets retain the selected build type's NDEBUG behavior.
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    foreach(test_target IN ITEMS
+        test_smoke
+        test_editing
+        test_file
+        test_file_save
+        test_input_parser
+        test_input_engine
+        test_command_engine
+        test_input_pipeline
+    )
+        target_compile_options(${test_target} PRIVATE -UNDEBUG)
+    endforeach()
+endif()

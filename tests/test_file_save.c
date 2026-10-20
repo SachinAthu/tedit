@@ -161,6 +161,65 @@ static void test_replace_failure_preserves_state_and_cleans_temporary_file(void)
     assert(rmdir(path) == 0);
 }
 
+static void test_malformed_document_storage_is_rejected_without_touching_destination(void)
+{
+    char path[] = "/tmp/tedit-save-malformed-XXXXXX";
+    int descriptor = mkstemp(path);
+    const unsigned char original[] = {'s', 'a', 'f', 'e'};
+    unsigned char actual[16];
+    EditorState state;
+    Document malformed;
+    DocumentLine malformed_line;
+
+    assert(descriptor >= 0);
+    write_all(descriptor, original, sizeof(original));
+    assert(close(descriptor) == 0);
+    assert(editor_state_init(&state));
+    assert(document_insert_character(&state.document, 0, 0, 'x'));
+    state.is_dirty = true;
+
+    malformed = state.document;
+    malformed.line_count = malformed.line_capacity + 1;
+    assert(file_save_document(path, &malformed) == FILE_SAVE_INVALID_ARGUMENT);
+
+    malformed = state.document;
+    malformed_line = state.document.lines[0];
+    malformed_line.length = malformed_line.capacity + 1;
+    malformed.lines = &malformed_line;
+    assert(file_save_document(path, &malformed) == FILE_SAVE_INVALID_ARGUMENT);
+
+    malformed = state.document;
+    malformed_line = state.document.lines[0];
+    malformed_line.data = NULL;
+    malformed.lines = &malformed_line;
+    assert(file_save_document(path, &malformed) == FILE_SAVE_INVALID_ARGUMENT);
+
+    assert(state.is_dirty);
+    assert(document_get_line(&state.document, 0)->length == 1);
+    assert(document_get_line(&state.document, 0)->data[0] == (uint32_t)'x');
+    assert(read_file(path, actual, sizeof(actual)) == sizeof(original));
+    assert(memcmp(actual, original, sizeof(original)) == 0);
+
+    editor_state_destroy(&state);
+    assert(unlink(path) == 0);
+}
+
+static void test_temporary_file_creation_failure_preserves_dirty_state(void)
+{
+    EditorState state;
+
+    assert(editor_state_init(&state));
+    assert(document_insert_character(&state.document, 0, 0, 'x'));
+    state.is_dirty = true;
+
+    assert(!editor_state_save_file(&state, "/tmp/tedit-missing-directory/file.txt"));
+    assert(state.is_dirty);
+    assert(document_get_line(&state.document, 0)->length == 1);
+    assert(document_get_line(&state.document, 0)->data[0] == (uint32_t)'x');
+
+    editor_state_destroy(&state);
+}
+
 static void test_zero_line_document_saves_empty_file(void)
 {
     char path[] = "/tmp/tedit-save-empty-XXXXXX";
@@ -231,6 +290,8 @@ int main(void)
     test_failed_save_preserves_dirty_flag_document_and_destination();
     test_invalid_save_arguments_preserve_dirty_flag();
     test_replace_failure_preserves_state_and_cleans_temporary_file();
+    test_malformed_document_storage_is_rejected_without_touching_destination();
+    test_temporary_file_creation_failure_preserves_dirty_state();
     test_zero_line_document_saves_empty_file();
     test_save_as_association_changes_only_after_success();
     puts("File save tests passed.");
