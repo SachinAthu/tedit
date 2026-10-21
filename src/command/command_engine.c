@@ -1,10 +1,23 @@
 #include "command/command_engine.h"
+#include "common/logger.h"
 
 #include "cursor/cursor.h"
 #include "document/document.h"
 #include "state/editor_state.h"
 
 #include <string.h>
+
+static void command_mark_document_dirty(EditorState *state)
+{
+    if (state != NULL && !state->is_dirty)
+    {
+        TEDIT_LOG_INFO("state", "Dirty Flag changed: clean -> dirty");
+    }
+    if (state != NULL)
+    {
+        state->is_dirty = true;
+    }
+}
 
 /*
  * This file is the "brain" of the editor: it turns commands into concrete
@@ -72,7 +85,7 @@ static bool command_backspace(EditorState *state, bool *changed)
         return true;
     }
 
-    state->is_dirty = true;
+    command_mark_document_dirty(state);
     *changed = true;
     return true;
 }
@@ -128,7 +141,7 @@ static bool command_delete_character(EditorState *state, bool *changed)
         return false;
     }
 
-    state->is_dirty = true;
+    command_mark_document_dirty(state);
     *changed = true;
     return true;
 }
@@ -598,7 +611,7 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
         {
             return false;
         }
-        state->is_dirty = true;
+        command_mark_document_dirty(state);
         changed = true;
         break;
     }
@@ -617,7 +630,7 @@ bool command_engine_execute(EditorState *state, const EditorCommand *command, co
         {
             return false;
         }
-        state->is_dirty = true;
+        command_mark_document_dirty(state);
         changed = true;
         break;
     case EDITOR_COMMAND_MOVE_LEFT:

@@ -164,3 +164,15 @@ If you plan to publish or distribute the project, add an appropriate `LICENSE` f
 ---
 
 **Terminal Text Editor** — built from the ground up in C.
+
+## Diagnostic Logging
+
+Development builds write diagnostic records to `log.txt` in the process's current working directory. Each run starts a fresh log, replacing the previous session's records. The first record names the build version and process ID, and every record includes a local timestamp, severity, component, and message.
+
+The logger supports `ERROR`, `WARN`, `INFO`, and `DEBUG`. Debug builds include all levels; Release builds compile out application logging by default. Logging can be disabled explicitly with `-DTEDIT_ENABLE_LOGGING=OFF`. Failure to open or write the log is non-fatal and does not change Editor State or the editing pipeline. Document contents are never logged.
+
+```bash
+cmake -S . -B build/debug -DCMAKE_BUILD_TYPE=Debug -DTEDIT_ENABLE_LOGGING=ON
+cmake --build build/debug
+ctest --test-dir build/debug --output-on-failure
+```

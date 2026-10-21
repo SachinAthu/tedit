@@ -2,9 +2,9 @@
 
 ## Project Status
 
-**Active — Volume X implementation; Chapter 53 complete, visual-column navigation refinement added**
+**Active — Volume X implementation; Chapter 54.6 complete**
 
-Chapters 45–51, Chapter 52 sections 52.2–52.8, and Chapter 53 sections 53.2–53.11 are implemented in the current source snapshot. The interface includes a bottom Status Bar, a white Message Bar with black text, filename editing with cursor navigation and Delete, and dirty-quit confirmation. Ctrl-S saves named documents to their current path and opens filename entry for unnamed documents; no separate Save As command is implemented. Debug and warning-clean builds pass all eight CTest targets, and pseudo-terminal checks cover the latest interface flows.
+Chapters 45–51, Chapter 52 sections 52.2–52.8, and Chapter 53 sections 53.2–53.11 are implemented in the current source snapshot. Chapter 54.1 through 54.6 are complete in the working tree. The interface includes a bottom Status Bar, a white Message Bar with black text, filename editing with cursor navigation and Delete, and dirty-quit confirmation. Ctrl-S saves named documents to their current path and opens filename entry for unnamed documents; no separate Save As command is implemented. Debug, sanitizer-enabled, warning-clean, and Release builds pass all nine CTest targets. Pseudo-terminal checks cover resize handling, clean signal termination, terminal restoration, and the latest interface flows.
 
 ## Completed
 
@@ -395,3 +395,98 @@ Next: Chapter 54 — Hardening the Editor.
 - [x] Vertical cursor and page movement preserve a preferred visual column across tabbed, wide-character, and short lines.
 - [x] Added regression coverage for a status position after a tab and vertical movement across tabbed lines with a short-line round trip.
 - [ ] Continue with Chapter 54 hardening work after this focused refinement.
+
+
+## Chapter 54 — Hardening the Editor
+
+### Chapter 54.1 — Establishing the Hardening Build
+
+- [x] Added the `TEDIT_ENABLE_SANITIZERS` CMake option for GCC/Clang.
+- [x] Debug build and all eight CTest targets pass.
+- [x] AddressSanitizer/UndefinedBehaviorSanitizer build and all eight CTest targets pass with leak detection enabled.
+
+### Chapter 54.2 — Document, Cursor, and Viewport Invariants
+
+- [x] Added test-side Document structure checks for line-array and line-storage consistency.
+- [x] Verified rejected Document edits leave contents and structural invariants unchanged.
+- [x] Verified rejected Cursor position assignments preserve all Cursor position/preference fields.
+- [x] Verified repeated forward/reverse Viewport adjustments preserve cursor visibility.
+- [x] Debug, sanitizer-enabled, and warning-clean builds pass all eight CTest targets.
+
+Next: Chapter 54.3 — Allocation and File-Operation Failures.
+
+
+## Chapter 54.3 — Allocation and File-Operation Failures
+
+- [x] Validate Document line-array and line-buffer metadata before file serialization.
+- [x] Reject malformed storage without modifying the existing destination file.
+- [x] Verify failed saves preserve the Dirty Flag and in-memory Document.
+- [x] Verify a file-read error preserves the destination Document.
+- [x] Debug build and all eight CTest targets pass.
+- [x] AddressSanitizer/UndefinedBehaviorSanitizer build and all eight CTest targets pass with leak detection enabled.
+- [x] Warning-clean build (`-Wall -Wextra -Wpedantic -Werror`) and all eight CTest targets pass.
+
+Next: Chapter 54.4 — Assertions and Debug Diagnostics. Deterministic allocation-failure injection remains open.
+
+## Chapter 54.4 — Assertions and Debug Diagnostics
+
+- [x] Added `TEDIT_ASSERT` for internal invariant checks while retaining explicit validation for public inputs.
+- [x] Added `TEDIT_ASSERT` for internal invariant checks; the later diagnostic logger is recorded in the Diagnostic Logging follow-up below.
+- [x] Added post-mutation Document storage assertions for successful initialization, insertion, deletion, split, and merge operations.
+- [x] Added diagnostic messages for rejected save paths, inconsistent Document storage, and temporary-file creation failures.
+- [x] Corrected test targets to keep `assert()` active in Release builds on GCC/Clang, without changing production-target `NDEBUG` behavior.
+- [x] Debug, sanitizer-enabled, warning-clean, and Release builds pass all eight CTest targets.
+- [x] Continue with Chapter 54.5 — Malformed Input and Parser Recovery.
+
+## Chapter 54.5 — Malformed Input and Parser Recovery
+
+- [x] Reprocess standalone control bytes that interrupt malformed/incomplete CSI sequences rather than swallowing them.
+- [x] Verify Ctrl-S recovery from a numeric CSI parameter and Escape restart after an incomplete CSI prefix.
+- [x] Verify oversized CSI parameter sequences are discarded safely and subsequent input is recognized.
+- [x] Verify null parser arguments are rejected without dereferencing them.
+- [x] Debug with diagnostics, sanitizer-enabled, warning-clean, and Release builds pass all eight CTest targets.
+
+Next: Chapter 54.6 — Terminal Restoration and Resize Handling.
+
+
+## Chapter 54.6 — Terminal Restoration and Resize Handling
+
+- [x] Added `terminal_get_size()` with null-argument validation and no partial output updates on failure.
+- [x] Corrected terminal restoration to use `TCSAFLUSH`, retry `EINTR`, and retain the raw-mode flag if restoration fails.
+- [x] Made alternate-screen cleanup null-safe.
+- [x] Added signal-safe flags for resize and termination signals; handlers perform no terminal I/O or allocation.
+- [x] Added transactional Renderer replacement on terminal resize and revalidated Cursor visibility through the existing redraw path.
+- [x] Added the ninth CTest target, `terminal`.
+- [x] Debug with diagnostics, sanitizer-enabled, warning-clean, and Release builds pass all nine CTest targets.
+- [x] Pseudo-terminal checks pass for SIGWINCH, SIGTERM, SIGHUP, terminal settings restoration, and alternate-screen cleanup.
+
+Next: Chapter 54.7 — Interactive Failure-Path Verification and Final Hardening Review.
+
+## Chapter 54.7 — Interactive Failure-Path Verification and Final Hardening Review
+
+- [x] Added `tests/test_pty_integration.py`, a POSIX pseudo-terminal integration test.
+- [x] Registered the integration test with CTest when Python 3 is available; the test has a 20-second timeout.
+- [x] Verified Ctrl-Q shutdown and restoration of terminal attributes, alternate-screen state, and wrap mode.
+- [x] Verified the event loop survives a valid SIGWINCH resize.
+- [x] Verified SIGINT, SIGTERM, and SIGHUP perform normal cleanup.
+- [x] Verified a startup file-load failure returns status 1 after terminal cleanup.
+- [x] Debug with diagnostics, AddressSanitizer/UndefinedBehaviorSanitizer, warning-clean, and Release configurations pass all ten CTest targets.
+
+Chapter 54 hardening milestone complete. Deterministic allocation and terminal-write failure injection remain open follow-up work.
+
+
+
+## Follow-up — Diagnostic Logging to `log.txt`
+
+- [x] Added `src/common/logger.{h,c}` with ERROR/WARN/INFO/DEBUG levels, timestamps, component labels, and formatted records.
+- [x] Added CMake option `TEDIT_ENABLE_LOGGING`; development configurations enable logging by default and Release omits application log calls.
+- [x] Integrated lifecycle, input-event, command, terminal, rendering-failure, file-operation, recoverable-error, and Dirty Flag transition records.
+- [x] Ensured log initialization/write failures are best-effort and do not become editor errors.
+- [x] Each session starts a fresh log, with a session-start record naming the build version and process ID.
+- [x] Added `tests/test_logger.c` and registered the eleventh CTest target.
+- [x] Extended pseudo-terminal integration to verify character input and Dirty Flag transition records, and verify that Release/logging-disabled builds do not create a log file.
+- [x] Added `log.txt` and build directories to `.gitignore`.
+- [x] Updated README with log location, configuration, and behavior.
+
+- [x] Debug with diagnostics/logging, sanitizer-enabled, warning-clean, Release, and explicit logging-disabled configurations each pass all eleven CTest targets.
+- [x] Verified the Release pseudo-terminal run does not create `log.txt`; Debug runs record lifecycle and failure events.

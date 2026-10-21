@@ -783,3 +783,64 @@ The Status Bar now renders `Ln N, Col N, Visual N`. All displayed coordinates ar
 Added `Cursor.preferred_visual_column` and its validity flag. Horizontal navigation and editing invalidate the visual preference; the next vertical move derives it from the current logical position. Up/Down/Page Up/Page Down then preserve that visual target across lines, mapping it to the nearest valid logical boundary. When the destination line is short, the actual cursor clamps to its end while the preferred visual column remains unchanged, so moving back to a longer line restores the intended position. The nearest-boundary policy chooses the boundary before a character when distances tie. Tabs remain stored as U+0009; this change does not rewrite document contents.
 
 Regression coverage verifies Status Bar reporting after a tab and vertical movement from a line containing a tab through another tabbed line and a short line, then back again. Debug build and all eight CTest targets pass.
+
+
+## Chapter 54 — Hardening the Editor
+
+### 54.1 — Sanitizer Build
+
+`TEDIT_ENABLE_SANITIZERS` is an opt-in CMake option. When enabled with GCC or Clang, `-fsanitize=address,undefined` and `-fno-omit-frame-pointer` are applied to `tedit_core` as public usage requirements so linked executables and tests are instrumented consistently. Unsupported compiler families fail configuration explicitly rather than silently ignoring the option.
+
+### 54.2 — Invariant Regression Tests
+
+The invariant checks are kept in `tests/test_editing.c`; they do not add diagnostic state or new public production interfaces. The Document checks cover active line storage and capacity relationships, while the Cursor checks cover insertion-position bounds and preservation after rejected assignments. Viewport checks assert that each successful visibility adjustment places the requested row and visual column inside the supplied screen rectangle. These tests check observable contracts without changing runtime behavior.
+
+Verification: Debug, AddressSanitizer/UndefinedBehaviorSanitizer, and warning-clean builds each pass all eight CTest targets. This does not yet prove allocation-failure recovery for every allocation site; deterministic allocation-failure injection remains a later hardening task.
+
+
+## Chapter 54.3 — File Failure Hardening
+
+The File Manager now validates the Document's active storage metadata before serializing it. The check runs before the serializer dereferences the line array, preventing malformed line-count, capacity, length, or buffer metadata from causing an out-of-bounds read during a save attempt. The validation is local to the File Manager and introduces no new public interface.
+
+Regression tests verify that malformed storage is rejected while the destination bytes, in-memory Document, and Dirty Flag remain unchanged. Additional tests exercise temporary-file creation failure and a POSIX directory-read failure; the latter confirms that failed loads leave the caller's existing Document intact. Debug, sanitizer-enabled, and warning-clean builds each pass all eight CTest targets. These tests do not simulate arbitrary `malloc`/`realloc` failures, so allocation-failure injection remains a separate hardening task.
+
+## Chapter 54.4 — Assertions and Debug Diagnostics
+
+Introduced `src/diagnostics/diagnostics.h` and `src/diagnostics/diagnostics.c`. `TEDIT_ASSERT` is used for internal invariants, and optional diagnostic errors are controlled by `TEDIT_ENABLE_DIAGNOSTICS`. Document mutation routines assert storage consistency after successful mutations. The later Diagnostic Logging follow-up routes persistent records to `log.txt` rather than mixing them with the terminal UI. Public API argument errors remain normal return-value paths rather than assertion failures.
+
+
+Release test verification exposed that test expressions inside `assert()` were removed by `NDEBUG`, causing the tests to skip required operations and fail. CMake now applies `-UNDEBUG` to test targets on GCC/Clang only; production targets retain the selected build type behavior. This keeps Release tests meaningful without changing the editor's Release configuration.
+
+
+## Chapter 54.5 — Malformed Input and Parser Recovery
+
+The Input Parser previously abandoned an incomplete CSI sequence when a control byte arrived, but did not parse that byte again. As a result, a standalone control key such as Ctrl-S could be swallowed if it arrived while the parser was in `INPUT_PARSER_CSI` or `INPUT_PARSER_CSI_PARAMETER`. The parser now resets the incomplete sequence and reprocesses control bytes from the normal state. Unknown printable CSI final bytes continue to be ignored so escape-sequence fragments are not inserted as text.
+
+Added regression tests for Ctrl-S interrupting a numeric CSI parameter, Escape restarting after an incomplete CSI prefix, an oversized numeric CSI parameter followed by valid printable input, and null arguments to parser feed/timeout APIs. Existing UTF-8 malformed-sequence and timeout-recovery tests remain in place. Verification: Debug with diagnostics, AddressSanitizer/UndefinedBehaviorSanitizer with leak detection, warning-clean (`-Wall -Wextra -Wpedantic -Werror`), and Release builds each pass all eight CTest targets.
+
+
+## Chapter 54.6 — Terminal Restoration and Resize Handling
+
+The Terminal Interface now exposes `terminal_get_size()` to query current dimensions. The query writes its output parameters only after a successful `TIOCGWINSZ` call with nonzero dimensions. During a resize, the event loop creates a replacement Renderer before swapping it with the active Renderer; therefore a failed allocation leaves the old Renderer intact for cleanup. The terminal dimensions are committed only after replacement initialization succeeds, and the standard redraw path adjusts the Viewport to keep the Cursor visible.
+
+Signal handlers for `SIGWINCH`, `SIGINT`, `SIGTERM`, and `SIGHUP` only set `volatile sig_atomic_t` flags. The event loop handles resize and graceful termination outside signal context, then normal cleanup restores terminal attributes, leaves the alternate screen, and reinstates the previous signal dispositions. The original `terminal_restore()` passed `TCIFLUSH` as the `tcsetattr()` action; this was corrected to `TCSAFLUSH`. Restoration retries `EINTR` and clears the raw-mode flag only when `tcsetattr()` succeeds. Alternate-screen cleanup now handles a null state pointer safely.
+
+Added `tests/test_terminal.c` for null output parameters and null cleanup pointers. Debug with diagnostics, sanitizer-enabled, warning-clean, and Release builds each pass all nine CTest targets. Pseudo-terminal integration verified resize redraw, Ctrl-Q exit, SIGTERM/SIGHUP exit, restored terminal attributes, and alternate-screen exit. These checks do not simulate terminal write failures or every possible resize/allocation race; those remain appropriate targets for the final hardening review.
+
+## Chapter 54.7 — Interactive Failure-Path Verification and Final Hardening Review
+
+Added `tests/test_pty_integration.py` and registered it as `pty_integration` when CMake finds a Python 3 interpreter on UNIX. The test launches the real `tedit` executable attached to a pseudo-terminal and checks clean Ctrl-Q shutdown, recognized input and Dirty Flag logging, a valid terminal resize, SIGINT/SIGTERM/SIGHUP termination, and startup failure while opening a missing file. It retains the startup output while checking cleanup output, verifies the alternate-screen exit and terminal wrap-mode restoration sequences, and compares the terminal attributes after process exit with the attributes captured before launch.
+
+The integration test is part of the ordinary CTest suite rather than a manual-only verification step. A 20-second CTest timeout prevents a hung editor process from blocking the suite indefinitely. Python is optional at configuration time, so core builds do not gain a mandatory Python dependency; systems without Python 3 simply omit this integration target.
+
+Verification: Debug with diagnostics, AddressSanitizer/UndefinedBehaviorSanitizer with leak detection, warning-clean (`-Wall -Wextra -Wpedantic -Werror`), and Release builds each pass all ten CTest targets. The test suite does not inject allocator failures or force terminal `write()` failures; those remain explicit limits rather than claimed coverage. No Git commit was created because this working copy was extracted from an archive without repository metadata.
+
+
+
+## Follow-up — Diagnostic Logging to `log.txt`
+
+The logger is a separate `common` module and remains an observer: it does not own editor data, consume input, or affect command decisions. `logger_init()` opens the configured path with truncation so each session starts a fresh log, writes a session-start record naming the build version and process ID, and returns failure to the caller, but the application intentionally ignores that result so an unavailable log file cannot prevent editing. The logger uses buffered stdio and does not flush each record; `logger_shutdown()` attempts a final flush and close without propagating logging failures into application behavior. After a write error, further records are disabled for that logger session.
+
+Each record contains local timestamp, severity, component, and formatted message. The minimum level is DEBUG in non-`NDEBUG` builds and INFO in builds with `NDEBUG`; Release configuration compiles application log macros to no-ops by default. The log records lifecycle transitions, recognized input events (characters as code points, not text content), commands, file load/save outcomes, Dirty Flag transitions, terminal restoration errors, and render/resize failures. No document contents are logged. The runtime path is `log.txt` relative to the process working directory and is ignored by Git.
+
+`tests/test_logger.c` covers severity filtering, timestamps, per-session truncation and the session-start record, invalid/unavailable paths, and best-effort behavior when a platform provides `/dev/full`. The pseudo-terminal integration test edits a character, initiates quit confirmation, and discards the edit; it verifies that the recognized code point and clean-to-dirty transition are logged without recording the text content. The same integration case verifies that Release and explicitly logging-disabled builds do not create `log.txt`. Debug, sanitizer-enabled, warning-clean, Release, and logging-disabled configurations each pass eleven of eleven tests.

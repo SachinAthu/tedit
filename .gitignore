@@ -71,3 +71,4 @@ gmon.out
 .clang-format-ignore
 
 /sample*
+/log.txt

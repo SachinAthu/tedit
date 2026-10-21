@@ -8,9 +8,9 @@
 
 #ifdef TEDIT_ENABLE_DIAGNOSTICS
 void tedit_log_error(const char *component, const char *message);
-#define TEDIT_LOG_ERROR(component, message) tedit_log_error((component), (message))
+#define TEDIT_DIAGNOSTIC_ERROR(component, message) tedit_log_error((component), (message))
 #else
-#define TEDIT_LOG_ERROR(component, message) ((void)0)
+#define TEDIT_DIAGNOSTIC_ERROR(component, message) ((void)0)
 #endif
 
 #endif

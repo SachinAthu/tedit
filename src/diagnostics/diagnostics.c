@@ -1,8 +1,10 @@
 #include "diagnostics.h"
 
-#ifdef TEDIT_ENABLE_DIAGNOSTICS
-#include <stdio.h>
+#include "common/logger.h"
 
+#include <stddef.h>
+
+#ifdef TEDIT_ENABLE_DIAGNOSTICS
 void tedit_log_error(const char *component, const char *message)
 {
     if (component == NULL)
@@ -14,7 +16,7 @@ void tedit_log_error(const char *component, const char *message)
         message = "unspecified diagnostic";
     }
 
-    (void)fprintf(stderr, "[tedit:error][%s] %s\n", component, message);
+    logger_log(LOGGER_LEVEL_ERROR, component, "%s", message);
 }
 #else
 typedef int tedit_diagnostics_translation_unit;

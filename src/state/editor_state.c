@@ -1,4 +1,5 @@
 #include "editor_state.h"
+#include "common/logger.h"
 #include "file/file.h"
 
 #include <string.h>
@@ -83,16 +84,23 @@ bool editor_state_load_file(EditorState *state, const char *path)
     memcpy(new_path, path, path_length + 1);
 
     /* Do not change the current state or path unless loading succeeds. */
-    if (file_load_document(path, &state->document) != FILE_LOAD_OK)
+    FileLoadResult load_result = file_load_document(path, &state->document);
+    if (load_result != FILE_LOAD_OK)
     {
+        TEDIT_LOG_WARN("file", "load failed: path=\"%s\" result=%d", path, (int)load_result);
         free(new_path);
         return false;
     }
+    TEDIT_LOG_INFO("file", "loaded file: path=\"%s\"", path);
 
     free(state->file_path);
     state->file_path = new_path;
     cursor_init(&state->cursor);
     viewport_init(&state->viewport);
+    if (state->is_dirty)
+    {
+        TEDIT_LOG_INFO("state", "Dirty Flag changed: dirty -> clean after load");
+    }
     state->is_dirty = false;
     state->filename_entry_active = false;
     state->filename_entry[0] = '\0';
@@ -123,11 +131,19 @@ bool editor_state_save_file(EditorState *state, const char *path)
         return false;
     }
 
-    if (file_save_document(path, &state->document) != FILE_SAVE_OK)
+    FileSaveResult save_result = file_save_document(path, &state->document);
+    if (save_result != FILE_SAVE_OK)
     {
+        TEDIT_LOG_WARN("file", "save failed: path=\"%s\" result=%d dirty=%s",
+                       path, (int)save_result, state->is_dirty ? "true" : "false");
         return false;
     }
 
+    TEDIT_LOG_INFO("file", "saved file: path=\"%s\"", path);
+    if (state->is_dirty)
+    {
+        TEDIT_LOG_INFO("state", "Dirty Flag changed: dirty -> clean after save");
+    }
     state->is_dirty = false;
     return true;
 }
@@ -171,14 +187,22 @@ bool editor_state_save_as(EditorState *state, const char *path)
     }
     memcpy(new_path, path, path_length + 1);
 
-    if (file_save_document(path, &state->document) != FILE_SAVE_OK)
+    FileSaveResult save_result = file_save_document(path, &state->document);
+    if (save_result != FILE_SAVE_OK)
     {
+        TEDIT_LOG_WARN("file", "save failed: path=\"%s\" result=%d dirty=%s",
+                       path, (int)save_result, state->is_dirty ? "true" : "false");
         free(new_path);
         return false;
     }
 
+    TEDIT_LOG_INFO("file", "saved file: path=\"%s\"", path);
     free(state->file_path);
     state->file_path = new_path;
+    if (state->is_dirty)
+    {
+        TEDIT_LOG_INFO("state", "Dirty Flag changed: dirty -> clean after save");
+    }
     state->is_dirty = false;
     return true;
 }

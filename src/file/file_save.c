@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "file/file.h"
+#include "common/logger.h"
 #include "diagnostics/diagnostics.h"
 
 #include <errno.h>
@@ -295,6 +296,7 @@ FileSaveResult file_save_document(const char *path, const Document *document)
 
     if (temporary_path == NULL)
     {
+        TEDIT_LOG_ERROR("file-save", "out of memory allocating temporary path");
         return FILE_SAVE_OUT_OF_MEMORY;
     }
 
@@ -305,6 +307,7 @@ FileSaveResult file_save_document(const char *path, const Document *document)
 
     if (descriptor < 0)
     {
+        TEDIT_LOG_ERROR("file-save", "temporary-file creation failed for path=\"%s\" errno=%d", path, errno);
         free(temporary_path);
         return FILE_SAVE_TEMPORARY_CREATE_FAILED;
     }
@@ -315,16 +318,29 @@ FileSaveResult file_save_document(const char *path, const Document *document)
     if (result == FILE_SAVE_OK && !close_succeeded)
     {
         result = FILE_SAVE_CLOSE_FAILED;
+        TEDIT_LOG_ERROR("file-save", "close failed for temporary file targeting path=\"%s\"", path);
     }
 
     if (result == FILE_SAVE_OK && rename(temporary_path, path) != 0)
     {
+        TEDIT_LOG_ERROR("file-save", "atomic replacement failed for path=\"%s\" errno=%d", path, errno);
         result = FILE_SAVE_REPLACE_FAILED;
+    }
+    else if (result != FILE_SAVE_OK)
+    {
+        TEDIT_LOG_ERROR("file-save", "serialization failed for path=\"%s\" result=%d", path, (int)result);
     }
 
     if (result != FILE_SAVE_OK)
     {
-        (void)unlink(temporary_path);
+        if (unlink(temporary_path) != 0)
+        {
+            TEDIT_LOG_WARN("file-save", "failed to remove temporary file after save failure errno=%d", errno);
+        }
+    }
+    else
+    {
+        TEDIT_LOG_DEBUG("file-save", "atomic replacement completed for path=\"%s\"", path);
     }
 
     free(temporary_path);

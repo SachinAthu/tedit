@@ -1,4 +1,5 @@
 #include "terminal.h"
+#include "common/logger.h"
 
 #include <errno.h> /* Gives us errno and EINTR, so we can retry interrupted writes. */
 #include <string.h> /* Gives us memset(), used to zero out the struct. */
@@ -25,6 +26,7 @@ static bool terminal_write_all(const char *data, size_t length)
 {
     if (data == NULL)
     {
+        TEDIT_LOG_ERROR("terminal", "rejected null terminal output buffer");
         return false;
     }
 
@@ -45,12 +47,14 @@ static bool terminal_write_all(const char *data, size_t length)
                 continue;
             }
 
+            TEDIT_LOG_ERROR("terminal", "terminal output write failed: errno=%d", errno);
             return false;
         }
 
         /* A return value of 0 means nothing could be written; give up. */
         if (result == 0)
         {
+            TEDIT_LOG_ERROR("terminal", "terminal output write returned zero bytes");
             return false;
         }
 
@@ -97,6 +101,7 @@ bool terminal_init(TerminalState *terminal)
      * function can fill it in. */
     if (tcgetattr(STDIN_FILENO, &terminal->original_attributes) == -1)
     {
+        TEDIT_LOG_ERROR("terminal", "tcgetattr failed: errno=%d", errno);
         return false;
     }
 
@@ -106,6 +111,7 @@ bool terminal_init(TerminalState *terminal)
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &window_size) == -1 ||
         window_size.ws_row == 0 || window_size.ws_col == 0)
     {
+        TEDIT_LOG_ERROR("terminal", "terminal dimensions unavailable: errno=%d", errno);
         return false;
     }
 
@@ -257,6 +263,11 @@ void terminal_restore(TerminalState *terminal)
     if (result == 0)
     {
         terminal->raw_mode_enabled = false;
+        TEDIT_LOG_DEBUG("terminal", "original terminal attributes restored");
+    }
+    else
+    {
+        TEDIT_LOG_ERROR("terminal", "failed to restore original terminal attributes: errno=%d", errno);
     }
 }
 

@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "command/command_engine.h"
+#include "common/logger.h"
 #include "cursor/cursor.h"
 #include "document/document.h"
 #include "input/input_engine.h"
@@ -36,6 +37,56 @@ static struct sigaction previous_term_action;
 static struct sigaction previous_hup_action;
 static bool signal_handlers_installed = false;
 
+static const char *application_input_event_name(InputEventType type)
+{
+    switch (type)
+    {
+    case INPUT_EVENT_NONE: return "none";
+    case INPUT_EVENT_CHARACTER: return "character";
+    case INPUT_EVENT_CTRL_Q: return "ctrl-q";
+    case INPUT_EVENT_CTRL_S: return "ctrl-s";
+    case INPUT_EVENT_BACKSPACE: return "backspace";
+    case INPUT_EVENT_ENTER: return "enter";
+    case INPUT_EVENT_ESCAPE: return "escape";
+    case INPUT_EVENT_ARROW_LEFT: return "left";
+    case INPUT_EVENT_ARROW_RIGHT: return "right";
+    case INPUT_EVENT_ARROW_UP: return "up";
+    case INPUT_EVENT_ARROW_DOWN: return "down";
+    case INPUT_EVENT_HOME: return "home";
+    case INPUT_EVENT_END: return "end";
+    case INPUT_EVENT_PAGE_UP: return "page-up";
+    case INPUT_EVENT_PAGE_DOWN: return "page-down";
+    case INPUT_EVENT_TAB: return "tab";
+    case INPUT_EVENT_DELETE: return "delete";
+    default: return "unknown";
+    }
+}
+
+static const char *application_command_name(EditorCommandType type)
+{
+    switch (type)
+    {
+    case EDITOR_COMMAND_NONE: return "none";
+    case EDITOR_COMMAND_INSERT_CHARACTER: return "insert-character";
+    case EDITOR_COMMAND_INSERT_TAB: return "insert-tab";
+    case EDITOR_COMMAND_BACKSPACE: return "backspace";
+    case EDITOR_COMMAND_INSERT_NEWLINE: return "insert-newline";
+    case EDITOR_COMMAND_CANCEL: return "cancel";
+    case EDITOR_COMMAND_MOVE_LEFT: return "move-left";
+    case EDITOR_COMMAND_MOVE_RIGHT: return "move-right";
+    case EDITOR_COMMAND_MOVE_UP: return "move-up";
+    case EDITOR_COMMAND_MOVE_DOWN: return "move-down";
+    case EDITOR_COMMAND_PAGE_UP: return "page-up";
+    case EDITOR_COMMAND_PAGE_DOWN: return "page-down";
+    case EDITOR_COMMAND_MOVE_HOME: return "home";
+    case EDITOR_COMMAND_MOVE_END: return "end";
+    case EDITOR_COMMAND_DELETE_CHARACTER: return "delete";
+    case EDITOR_COMMAND_SAVE: return "save";
+    case EDITOR_COMMAND_QUIT: return "quit";
+    default: return "unknown";
+    }
+}
+
 static void application_signal_handler(int signal_number)
 {
     if (signal_number == SIGWINCH)
@@ -58,6 +109,7 @@ static bool application_install_signal_handlers(void)
 
     if (sigaction(SIGWINCH, &action, &previous_winch_action) == -1)
     {
+        TEDIT_LOG_ERROR("lifecycle", "failed to install SIGWINCH handler");
         return false;
     }
     if (sigaction(SIGINT, &action, &previous_int_action) == -1)
@@ -196,13 +248,16 @@ static bool redraw_after_action(Renderer *renderer, EditorState *state)
  * for cleanup. The terminal dimensions are committed only after initialization
  * succeeds.
  */
-static bool application_handle_resize(TerminalState *terminal, EditorState *state, Renderer *renderer)
+static bool application_handle_resize(TerminalState *terminal,
+                                      EditorState *state,
+                                      Renderer *renderer)
 {
     size_t rows;
     size_t columns;
     Renderer replacement;
 
-    if (terminal == NULL || state == NULL || renderer == NULL || !terminal_get_size(&rows, &columns))
+    if (terminal == NULL || state == NULL || renderer == NULL ||
+        !terminal_get_size(&rows, &columns))
     {
         return false;
     }
@@ -211,16 +266,19 @@ static bool application_handle_resize(TerminalState *terminal, EditorState *stat
     {
         return true;
     }
+    TEDIT_LOG_INFO("terminal", "resize requested: rows=%zu columns=%zu", rows, columns);
 
     /* The Renderer needs at least one document row and reserves the last
      * physical terminal column to avoid delayed-wrap behavior. */
     if (rows < 4 || columns < 2)
     {
+        TEDIT_LOG_WARN("terminal", "rejected terminal size rows=%zu columns=%zu", rows, columns);
         return false;
     }
 
     if (!renderer_init(&replacement, rows, columns - 1))
     {
+        TEDIT_LOG_ERROR("renderer", "failed to allocate replacement after terminal resize");
         return false;
     }
 
@@ -229,8 +287,14 @@ static bool application_handle_resize(TerminalState *terminal, EditorState *stat
     terminal->rows = rows;
     terminal->columns = columns;
     renderer_destroy(&previous);
+    TEDIT_LOG_INFO("renderer", "renderer resized to rows=%zu columns=%zu", rows, columns - 1);
 
-    return redraw_after_action(renderer, state);
+    if (!redraw_after_action(renderer, state))
+    {
+        TEDIT_LOG_ERROR("renderer", "redraw failed after terminal resize");
+        return false;
+    }
+    return true;
 }
 
 /*
@@ -251,7 +315,10 @@ static bool application_handle_resize(TerminalState *terminal, EditorState *stat
  * Returns:
  *   true when the user quit normally, false on an unrecoverable error.
  */
-static bool application_event_loop(TerminalState *terminal, EditorState *state, Renderer *renderer, const char *save_path)
+static bool application_event_loop(TerminalState *terminal,
+                                   EditorState *state,
+                                   Renderer *renderer,
+                                   const char *save_path)
 {
     InputParser parser;
     input_parser_init(&parser);
@@ -291,6 +358,7 @@ static bool application_event_loop(TerminalState *terminal, EditorState *state, 
             {
                 if (!input_parser_timeout(&parser, &event))
                 {
+                    TEDIT_LOG_ERROR("input", "parser timeout handling failed");
                     return false;
                 }
 
@@ -313,6 +381,7 @@ static bool application_event_loop(TerminalState *terminal, EditorState *state, 
                 {
                     continue;
                 }
+                TEDIT_LOG_ERROR("input", "terminal input read failed: errno=%d", errno);
                 return false;
             }
 
@@ -338,7 +407,21 @@ static bool application_event_loop(TerminalState *terminal, EditorState *state, 
          */
         if (!event_ready && !input_parser_feed(&parser, byte, &event))
         {
+            TEDIT_LOG_ERROR("input", "Input Parser rejected byte 0x%02X", (unsigned int)byte);
             return false;
+        }
+
+        if (event.type != INPUT_EVENT_NONE)
+        {
+            if (event.type == INPUT_EVENT_CHARACTER)
+            {
+                TEDIT_LOG_DEBUG("input", "recognized event=%s codepoint=U+%04X",
+                                application_input_event_name(event.type), (unsigned int)event.character);
+            }
+            else
+            {
+                TEDIT_LOG_DEBUG("input", "recognized event=%s", application_input_event_name(event.type));
+            }
         }
 
         EditorCommand command;
@@ -347,17 +430,27 @@ static bool application_event_loop(TerminalState *terminal, EditorState *state, 
         /* Pipeline step by step: event -> command -> state change -> redraw. */
         if (!input_engine_translate(&event, &command))
         {
+            TEDIT_LOG_ERROR("input", "Input Engine failed to translate event=%s",
+                            application_input_event_name(event.type));
             return false;
         }
 
+        if (command.type != EDITOR_COMMAND_NONE)
+        {
+            TEDIT_LOG_DEBUG("command", "executing command=%s", application_command_name(command.type));
+        }
         command.page_rows = renderer->document_rows;
 
         if (!command_engine_execute(state, &command, save_path, &redraw, &should_quit))
         {
+            TEDIT_LOG_ERROR("command", "Command Engine failed for command=%s",
+                            application_command_name(command.type));
             return false;
         }
         if (redraw && !redraw_after_action(renderer, state))
         {
+            TEDIT_LOG_ERROR("renderer", "redraw failed after command=%s",
+                            application_command_name(command.type));
             return false;
         }
         if (should_quit)
@@ -386,9 +479,22 @@ int main(int argc, char *argv[])
 {
     (void)setlocale(LC_CTYPE, "");
 
+#ifdef TEDIT_ENABLE_LOGGING
+#ifdef NDEBUG
+    (void)logger_init("log.txt", LOGGER_LEVEL_INFO);
+#else
+    (void)logger_init("log.txt", LOGGER_LEVEL_DEBUG);
+#endif
+    TEDIT_LOG_INFO("lifecycle", "editor process started");
+#endif
+
     if (argc > 2)
     {
+        TEDIT_LOG_ERROR("lifecycle", "invalid command-line argument count: %d", argc);
         fprintf(stderr, "Usage: %s [filename]\n", argv[0]);
+#ifdef TEDIT_ENABLE_LOGGING
+        logger_shutdown();
+#endif
         return 1;
     }
 
@@ -403,45 +509,60 @@ int main(int argc, char *argv[])
 
     if (!application_install_signal_handlers())
     {
-        return 1;
+        TEDIT_LOG_ERROR("lifecycle", "failed to install signal handlers");
+        goto early_cleanup;
     }
     if (!terminal_init(&terminal))
     {
+        TEDIT_LOG_ERROR("terminal", "terminal initialization failed");
         application_restore_signal_handlers();
-        return 1;
+        goto early_cleanup;
     }
     if (!terminal_enable_raw_mode(&terminal))
     {
+        TEDIT_LOG_ERROR("terminal", "failed to enable raw mode");
         terminal_restore(&terminal);
         application_restore_signal_handlers();
-        return 1;
+        goto early_cleanup;
     }
     if (!terminal_enter_alternate_screen(&terminal))
     {
+        TEDIT_LOG_ERROR("terminal", "failed to enter alternate screen");
         terminal_restore(&terminal);
         application_restore_signal_handlers();
-        return 1;
+        goto early_cleanup;
     }
     if (!editor_state_init(&state))
     {
+        TEDIT_LOG_ERROR("state", "Editor State initialization failed");
         goto cleanup;
     }
+    TEDIT_LOG_INFO("state", "Editor State initialized");
     state_initialized = true;
 
     if (startup_path != NULL && !editor_state_load_file(&state, startup_path))
     {
         startup_load_failed = true;
+        TEDIT_LOG_ERROR("file", "startup file load failed: path=\"%s\"", startup_path);
         goto cleanup;
     }
     if (terminal.columns < 2 || !renderer_init(&renderer, terminal.rows, terminal.columns - 1))
     {
+        TEDIT_LOG_ERROR("renderer", "initialization failed for terminal rows=%zu columns=%zu",
+                        terminal.rows, terminal.columns);
         goto cleanup;
     }
+    TEDIT_LOG_INFO("renderer", "initialized rows=%zu columns=%zu", terminal.rows, terminal.columns - 1);
     renderer_initialized = true;
 
-    if (!redraw_after_action(&renderer, &state) ||
-        !application_event_loop(&terminal, &state, &renderer, startup_path))
+    if (!redraw_after_action(&renderer, &state))
     {
+        TEDIT_LOG_ERROR("renderer", "initial frame rendering failed");
+        goto cleanup;
+    }
+    if (!application_event_loop(&terminal, &state, &renderer, startup_path))
+    {
+        TEDIT_LOG_ERROR("lifecycle", "event loop terminated after an unrecoverable error");
         goto cleanup;
     }
 
@@ -451,10 +572,12 @@ cleanup:
     if (renderer_initialized)
     {
         renderer_destroy(&renderer);
+        TEDIT_LOG_DEBUG("renderer", "Renderer resources released");
     }
     if (state_initialized)
     {
         editor_state_destroy(&state);
+        TEDIT_LOG_DEBUG("state", "Editor State resources released");
     }
     terminal_restore(&terminal);
     terminal_leave_alternate_screen(&terminal);
@@ -465,5 +588,16 @@ cleanup:
         fprintf(stderr, "tedit: unable to open or decode '%s'.\n", startup_path);
     }
 
+    TEDIT_LOG_INFO("lifecycle", "editor process stopped with status=%d", exit_status);
+#ifdef TEDIT_ENABLE_LOGGING
+    logger_shutdown();
+#endif
     return exit_status;
+
+early_cleanup:
+    TEDIT_LOG_INFO("lifecycle", "editor process stopped during startup with status=1");
+#ifdef TEDIT_ENABLE_LOGGING
+    logger_shutdown();
+#endif
+    return 1;
 }

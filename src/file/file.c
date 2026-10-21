@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "file.h"
+#include "common/logger.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -412,6 +413,7 @@ FileLoadResult file_load_document(const char *path, Document *out_document)
 
     if (path == NULL || path[0] == '\0' || out_document == NULL)
     {
+        TEDIT_LOG_WARN("file", "load rejected invalid arguments");
         return FILE_LOAD_INVALID_ARGUMENT;
     }
 
@@ -419,6 +421,7 @@ FileLoadResult file_load_document(const char *path, Document *out_document)
 
     if (descriptor < 0)
     {
+        TEDIT_LOG_WARN("file", "open failed: path=\"%s\" errno=%d", path, errno);
         return FILE_LOAD_OPEN_FAILED;
     }
 
@@ -431,12 +434,14 @@ FileLoadResult file_load_document(const char *path, Document *out_document)
 
     if (result != FILE_LOAD_OK)
     {
+        TEDIT_LOG_WARN("file", "read failed: path=\"%s\" result=%d", path, (int)result);
         file_byte_buffer_destroy(&bytes);
         return result;
     }
 
     if (!document_init(&loaded_document))
     {
+        TEDIT_LOG_ERROR("file", "out of memory while initializing Document for path=\"%s\"", path);
         file_byte_buffer_destroy(&bytes);
         return FILE_LOAD_OUT_OF_MEMORY;
     }
@@ -446,6 +451,7 @@ FileLoadResult file_load_document(const char *path, Document *out_document)
 
     if (result != FILE_LOAD_OK)
     {
+        TEDIT_LOG_WARN("file", "decode failed: path=\"%s\" result=%d", path, (int)result);
         document_destroy(&loaded_document);
         return result;
     }
