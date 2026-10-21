@@ -2,9 +2,13 @@
 
 ## Project Status
 
-**Active — Volume X implementation; Chapter 54.6 complete**
+**Active — Chapter 54 hardening complete; diagnostic logging implemented; Chapter 55 is next**
 
-Chapters 45–51, Chapter 52 sections 52.2–52.8, and Chapter 53 sections 53.2–53.11 are implemented in the current source snapshot. Chapter 54.1 through 54.6 are complete in the working tree. The interface includes a bottom Status Bar, a white Message Bar with black text, filename editing with cursor navigation and Delete, and dirty-quit confirmation. Ctrl-S saves named documents to their current path and opens filename entry for unnamed documents; no separate Save As command is implemented. Debug, sanitizer-enabled, warning-clean, and Release builds pass all nine CTest targets. Pseudo-terminal checks cover resize handling, clean signal termination, terminal restoration, and the latest interface flows.
+Chapters 45–51, Chapter 52 sections 52.2–52.8, Chapter 53 sections 53.2–53.11, and Chapter 54 sections 54.1–54.7 are complete for the current implementation scope. The diagnostic logging follow-up adds `src/common/logger.{h,c}`, the `ERROR`, `WARN`, `INFO`, and `DEBUG` levels, timestamped component-labelled records, and best-effort logging to `log.txt`. The logger opens the file in write mode. Development builds enable application logging by default; Release builds omit application log calls, and `TEDIT_ENABLE_LOGGING=OFF` disables them explicitly. The editor and logger are implemented in C99. The optional Python POSIX pseudo-terminal test is only an external integration harness.
+
+The current CMake configuration registers ten C test targets and a POSIX pseudo-terminal integration test when Python 3 is available. The implementation record reports all eleven CTest tests passing in Debug with diagnostics/logging, sanitizer-enabled, warning-clean, Release, and explicit logging-disabled configurations. Remaining hardening limitations include deterministic allocation-failure injection, exhaustive terminal-write failure injection, and known Unicode/filename display limitations. **Next milestone: Chapter 55 — Final Integration and Release.**
+
+> **Status note:** Chapter-specific entries later in this document preserve historical milestone records, including the test counts and “next step” notes that were accurate at the time. The current status, capability, verification, summary, milestone, and limitation sections above/below take precedence for the present implementation snapshot.
 
 ## Completed
 
@@ -103,91 +107,91 @@ Chapters 45–51, Chapter 52 sections 52.2–52.8, and Chapter 53 sections 53.2�
 
 ## Current Runtime Capabilities
 
-The application can now:
+The current implementation can:
 
-- initialize the terminal and enter raw mode;
-- preserve and restore the original terminal configuration;
-- obtain the terminal dimensions;
-- initialize the Editor State and its Document;
-- render the visible document through a Screen Buffer;
-- insert printable ASCII characters into the Document;
-- advance the Cursor after successful insertion;
-- move the Cursor left and right within the current logical line;
-- move the Cursor up and down while preserving its preferred column;
+- initialize the POSIX terminal, enter raw mode, enter the alternate screen, and restore terminal state during cleanup;
+- query terminal dimensions and handle `SIGWINCH` by creating a replacement Renderer before replacing the active Renderer;
+- handle `SIGINT`, `SIGTERM`, and `SIGHUP` through signal-safe flags and normal event-loop cleanup;
+- load an optional startup file, decode valid UTF-8, normalize LF/CRLF input, and preserve the destination Document on load failure;
+- save UTF-8 text through a temporary file and atomic replacement, preserving the Dirty Flag and destination on tested failure paths;
+- maintain a logical-line Document and a Cursor measured in Unicode code points;
+- parse UTF-8 keyboard input and common terminal sequences through the Input Parser → Input Engine → Command Engine pipeline;
+- insert text, insert tabs, split and merge lines, delete code points, and navigate with arrows, Home, End, Page Up, and Page Down;
+- preserve the preferred visual column during vertical navigation and map logical positions to visual columns using tab stops, wide-code-point widths, and combining marks;
 - maintain vertical and horizontal Viewport offsets to keep the Cursor visible;
-- render the visible document region using the Viewport offsets;
-- reserve the terminal's final physical column to avoid the observed right-edge crash in WSL;
-- delete the character before the Cursor using Backspace, or merge with the previous line when Backspace is pressed at column zero and a previous line exists;
-- split logical lines using Enter or line feed;
-- mark the Document dirty after successful insertion, deletion, line splitting, or line merging;
-- redraw the screen after editing and navigation;
-- exit using `Ctrl-Q`;
-- clean up initialized resources and return control to the shell.
+- render through a contiguous Screen Buffer using full-frame redraws, a bottom Status Bar, a styled Message Bar, and a separator row;
+- prompt before quitting a dirty Document and support filename entry when saving an unnamed Document;
+- write timestamped diagnostic records to `log.txt` in development builds, with severity filtering and best-effort failure handling;
+- run invariant checks, regression tests, sanitizer builds, warning-clean builds, Release tests, and optional POSIX pseudo-terminal integration tests.
+
+The logger does not own or mutate Editor State. Input text is not written to the log; character events record the Unicode code point rather than the document content.
 
 ## Verification
 
-### Build and automated tests
+### Current build and automated-test status
 
-- [x] CMake configuration and build succeeded for the current Chapter 49 implementation
-- [x] `smoke` automated test passed
-- [x] `editing` automated test passed
-- [x] Regression tests cover repeated vertical and horizontal movement, Viewport visibility, and Renderer positioning
-- [x] User confirmed the build succeeds and registered tests pass
-- [x] User manually verified that the vertical scrolling issue is resolved
-- [x] User manually verified that typing past the right edge no longer closes the editor in WSL
-- [ ] Comprehensive automated tests across all Document, Cursor, Screen Buffer, Renderer, and terminal behaviors
-- [ ] Integration and regression testing across broader failure paths
-- [ ] Terminal resizing and frame reinitialization
-- [ ] Broader end-to-end verification during the hardening milestone
+- [x] The implementation record reports a successful Debug build with diagnostics and logging enabled.
+- [x] The implementation record reports a successful AddressSanitizer/UndefinedBehaviorSanitizer build with leak detection and halt-on-error enabled.
+- [x] The implementation record reports a successful warning-clean build using `-Wall -Wextra -Wpedantic -Werror`.
+- [x] The implementation record reports a successful Release build.
+- [x] The implementation record reports a successful Debug build with logging explicitly disabled.
+- [x] All ten C test targets pass in the reported configurations.
+- [x] The POSIX pseudo-terminal integration test passes when Python 3 is available, giving eleven CTest tests in that environment.
+- [x] Logger tests cover severity filtering, timestamps, unavailable log paths, and best-effort write failure handling.
+- [x] Pseudo-terminal integration covers Ctrl-Q, resize handling, signal termination, terminal restoration, startup-load failure, and logging expectations.
+- [x] Release and explicitly logging-disabled integration runs do not create `log.txt`; development integration verifies lifecycle and failure records.
 
-The current build and registered tests pass, and the user has confirmed the two scrolling fixes in the actual WSL terminal. Comprehensive correctness, allocation-failure coverage, terminal resizing, and later end-to-end hardening remain outstanding.
+### Remaining verification work
+
+- [ ] Add deterministic allocator-failure injection across allocation sites.
+- [ ] Add exhaustive terminal-output write-failure injection and recovery coverage.
+- [ ] Expand terminal-size integration coverage beyond the currently tested resize scenarios.
+- [ ] Continue Unicode validation for grapheme clusters, emoji sequences, and terminal-specific width behavior.
+
+These verification statements summarize the current implementation records. Historical chapter sections below retain the test counts that applied when those milestones were completed.
 
 ## Implementation Status Summary
 
-| Area                                                        | Status                                                                                              |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| Repository and Git workflow                                 | Established                                                                                         |
-| CMake and C99 configuration                                 | Established                                                                                         |
-| Terminal initialization, raw mode, restoration, and cleanup | Implemented                                                                                         |
-| Application lifecycle and event loop                        | Implemented; complete parser-to-command pipeline                                                    |
-| Editor State                                                | Implemented                                                                                         |
-| Document                                                    | Vector of logical lines; insertion, deletion, splitting, and merging implemented                    |
-| Cursor                                                      | Validated logical position, horizontal and vertical movement, preferred-column behavior implemented |
-| Viewport                                                    | Vertical and horizontal offsets and Cursor visibility maintenance implemented                       |
-| Screen Buffer                                               | Implemented                                                                                         |
-| Renderer                                                    | Full redraw; bottom Status Bar, styled Message Bar, and separator row                               |
-| Unicode character insertion                                 | UTF-8 input events and Unicode scalar insertion implemented                                         |
-| Backspace character deletion and line merging               | Implemented                                                                                         |
-| Enter and logical-line splitting                            | Implemented                                                                                         |
-| Dirty Flag                                                  | Updated after successful insertion, deletion, splitting, and merging                                |
-| Cursor navigation                                           | Arrow keys, Home/End, and Page Up/Down implemented                                 |
-| Viewport and scrolling                                      | Implemented; vertical and horizontal behavior manually verified in WSL                              |
-| File loading                                                | Implemented: UTF-8 decode, LF/CRLF normalization, empty files, startup filename                     |
-| File saving                                                 | Safe save implemented; Ctrl-S saves current path or opens filename entry for unnamed documents      |
-| Dedicated Input Parser and command pipeline                 | Input Parser, Input Engine, and Command Engine implemented                                          |
-| Status Bar and Message Bar                                  | Implemented; Status Bar bottom, white Message Bar, one-row separator                                |
-| Terminal resize handling                                    | Not implemented                                                                                     |
-| Unicode-aware input and display-width mapping               | Implemented for wide code points and combining marks; locale wcwidth plus deterministic fallback ranges |
-| Automated tests                                             | Eight CTest targets pass in Debug and warning-clean builds                                          |
-| Hardening and final integration                             | Pending                                                                                             |
+| Area                                                                          | Current status                                                                                                       |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Repository, CMake, and C99                                                    | Established                                                                                                          |
+| Terminal initialization, raw mode, restoration, alternate screen, and cleanup | Implemented; lifecycle and signal cleanup covered by pseudo-terminal tests                                           |
+| Resize handling                                                               | Implemented with signal-safe notification and transactional Renderer replacement                                     |
+| Editor State and Dirty Flag                                                   | Implemented; tested save/edit transitions preserve dirty state on covered failures                                   |
+| Document                                                                      | Logical-line vector; insertion, deletion, split, merge, and UTF-8 code-point editing implemented                     |
+| Cursor and navigation                                                         | Logical positions, horizontal/vertical movement, Home/End, Page Up/Down, preferred visual column                     |
+| Viewport                                                                      | Vertical and horizontal offsets; Cursor visibility maintained                                                        |
+| Screen Buffer and Renderer                                                    | Implemented; full redraw, tab expansion, wide-character continuation cells, combining marks, Status Bar, Message Bar |
+| File Manager                                                                  | UTF-8 loading/saving, LF/CRLF normalization, temporary-file save and replacement                                     |
+| Input Parser / Input Engine / Command Engine                                  | Integrated command pipeline implemented                                                                              |
+| Filename entry and unsaved-change confirmation                                | Implemented for unnamed-document save and dirty-quit workflow                                                        |
+| Diagnostic assertions                                                         | Implemented for internal invariants                                                                                  |
+| Diagnostic logging                                                            | Implemented in `src/common/logger.{h,c}`; write-mode `log.txt`, four levels, timestamps, component labels            |
+| Automated tests                                                               | Ten C test targets plus optional POSIX pseudo-terminal test; eleven CTest tests when Python 3 is available           |
+| Remaining hardening                                                           | Allocation-failure injection, exhaustive terminal-write failure injection, broader resize matrix                     |
+| Next milestone                                                                | Chapter 55 — Final Integration and Release                                                                           |
 
 ## Current Milestone
 
-**Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests**
+**Chapter 54 hardening complete; diagnostic logging follow-up implemented.**
 
-Chapter 53.10 consolidates boundary and regression coverage for the keyboard editing and navigation path. Added an input-pipeline regression for Delete at the final line boundary and Delete merging a following line. Existing tests cover Home/End, page navigation boundaries and preferred-column behavior, Unicode code-point editing, tab display columns, viewport constraints, and filename-entry isolation. Debug and warning-clean builds pass all eight CTest targets. A pseudo-terminal run verified printable input, Home, Delete, End, Tab, Ctrl-S filename entry/save, Ctrl-Q exit, exact saved bytes, and alternate-screen restoration.
+The current implementation includes Document/Cursor/Viewport invariant tests, pre-serialization storage validation, internal assertions, malformed-input parser recovery, terminal restoration and resize handling, POSIX pseudo-terminal lifecycle tests, and the persistent diagnostic logger. The logger uses write mode and does not modify Editor State. The reported build matrix passes all eleven CTest tests when Python 3 is available.
 
 ## Next Milestone
 
-**Chapter 53.11 — Resulting Implementation State**
+**Chapter 55 — Final Integration and Release**
+
+The next milestone should reconcile the implementation against the SRS and architecture documents, verify the documented clean-build workflow, review known issues and test coverage, and prepare a release-ready repository snapshot.
 
 ## Current Limitations
 
 - Non-ASCII filename bytes are preserved for file operations but rendered as `?` in the Status Bar and filename-entry prompt.
-- Unicode display width is handled with POSIX `wcwidth()` where available, plus fallback ranges for common combining and wide-character blocks. The fallback ranges are not a complete, versioned Unicode East Asian Width database; grapheme clusters, emoji ZWJ sequences, and terminal-specific width differences remain limitations.
-- Ctrl-S on a named document saves to the current path. A separate Save As command is intentionally deferred.
-- Terminal resizing and frame reinitialization are not implemented.
-- Broader allocation-failure, sanitizer, and terminal-size integration coverage remains part of hardening.
+- Unicode display width uses POSIX `wcwidth()` where available and fallback ranges for common combining and wide-character blocks. Grapheme clusters, emoji ZWJ sequences, a complete versioned Unicode width database, and terminal-specific width differences remain limitations.
+- Ctrl-S saves an associated Document to its current path. There is no separate Save As command for an already-associated Document.
+- Deterministic allocation-failure injection and exhaustive terminal-output write-failure injection are not implemented.
+- The logger uses the fixed relative path `log.txt`; custom log-path configuration and explicit runtime log-level configuration are not implemented.
+- Logging is best-effort and buffered. If the filesystem reports a write failure, the editor continues, and the final buffered records may be lost.
+- The pseudo-terminal integration test requires a POSIX environment and Python 3; the C implementation itself does not depend on Python.
 
 ## Chapter 51 — Saving Files (Sections 51.2–51.5)
 
@@ -271,7 +275,6 @@ Current next milestone: Chapter 53.
 
 Next: Chapter 53.
 
-
 ## Chapter 53.2 — Terminal Sequences for Additional Keys
 
 - [x] Added abstract Input Events for Home, End, Page Up, Page Down, and Tab.
@@ -286,7 +289,6 @@ Next: Chapter 53.
 - [x] Debug build and all eight CTest targets pass.
 
 Next: Chapter 53.4 — Delete-Key Editing.
-
 
 ## Chapter 53.5 — Page Up and Page Down Navigation
 
@@ -317,7 +319,6 @@ Note: this milestone provides the built-in configuration value and consuming API
 
 Next: Chapter 53.7 — UTF-8 Keyboard Input and Character-Boundary Editing.
 
-
 ## Chapter 53.7 — UTF-8 Keyboard Input and Character-Boundary Editing
 
 - [x] Verified UTF-8 parser behavior for two-, three-, and four-byte Unicode scalar values.
@@ -330,9 +331,7 @@ Next: Chapter 53.7 — UTF-8 Keyboard Input and Character-Boundary Editing.
 
 Next: Chapter 53.8 — Logical Cursor Positions and Visual Display Columns.
 
-
 **Chapter 53.8 implementation result:** The Screen Buffer now represents wide-character continuation cells and stores combining marks alongside their base cell. The Renderer calculates logical-to-visual positions using tab stops and Unicode display widths, and emits wide and combining code points without counting UTF-8 bytes as terminal columns. Tests cover CJK width, combining marks, and cursor placement.
-
 
 ## Chapter 53.8 — Logical Cursor Positions and Visual Display Columns
 
@@ -347,7 +346,6 @@ Next: Chapter 53.8 — Logical Cursor Positions and Visual Display Columns.
 
 Next: Chapter 53.9 — Input Engine and Command Engine Integration.
 
-
 ## Chapter 53.9 — Input Engine and Command Engine Integration
 
 - [x] Audited the complete parser → Input Engine → Command Engine path for the Chapter 53 keyboard additions.
@@ -361,7 +359,6 @@ Next: Chapter 53.9 — Input Engine and Command Engine Integration.
 
 Next: Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests.
 
-
 ## Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests
 
 - [x] Added input-pipeline regression for Delete at the final empty line (no-op, no Dirty Flag change, no redraw).
@@ -372,7 +369,6 @@ Next: Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests.
 - [x] Pseudo-terminal editing/save/exit test passed; saved output was exactly `bc\t\n`, and alternate-screen restoration was observed.
 
 Chapter 53.11 — Resulting Implementation State is complete. Next: Chapter 54 — Hardening the Editor.
-
 
 ## Chapter 53.11 — Resulting Implementation State
 
@@ -387,7 +383,6 @@ Chapter 53.11 — Resulting Implementation State is complete. Next: Chapter 54 �
 
 Next: Chapter 54 — Hardening the Editor.
 
-
 ### Follow-up — Status Bar and Vertical Navigation
 
 - [x] Status Bar reports line, logical column, and visual display column explicitly.
@@ -395,7 +390,6 @@ Next: Chapter 54 — Hardening the Editor.
 - [x] Vertical cursor and page movement preserve a preferred visual column across tabbed, wide-character, and short lines.
 - [x] Added regression coverage for a status position after a tab and vertical movement across tabbed lines with a short-line round trip.
 - [ ] Continue with Chapter 54 hardening work after this focused refinement.
-
 
 ## Chapter 54 — Hardening the Editor
 
@@ -414,7 +408,6 @@ Next: Chapter 54 — Hardening the Editor.
 - [x] Debug, sanitizer-enabled, and warning-clean builds pass all eight CTest targets.
 
 Next: Chapter 54.3 — Allocation and File-Operation Failures.
-
 
 ## Chapter 54.3 — Allocation and File-Operation Failures
 
@@ -448,7 +441,6 @@ Next: Chapter 54.4 — Assertions and Debug Diagnostics. Deterministic allocatio
 
 Next: Chapter 54.6 — Terminal Restoration and Resize Handling.
 
-
 ## Chapter 54.6 — Terminal Restoration and Resize Handling
 
 - [x] Added `terminal_get_size()` with null-argument validation and no partial output updates on failure.
@@ -474,19 +466,17 @@ Next: Chapter 54.7 — Interactive Failure-Path Verification and Final Hardening
 
 Chapter 54 hardening milestone complete. Deterministic allocation and terminal-write failure injection remain open follow-up work.
 
-
-
 ## Follow-up — Diagnostic Logging to `log.txt`
 
 - [x] Added `src/common/logger.{h,c}` with ERROR/WARN/INFO/DEBUG levels, timestamps, component labels, and formatted records.
 - [x] Added CMake option `TEDIT_ENABLE_LOGGING`; development configurations enable logging by default and Release omits application log calls.
 - [x] Integrated lifecycle, input-event, command, terminal, rendering-failure, file-operation, recoverable-error, and Dirty Flag transition records.
 - [x] Ensured log initialization/write failures are best-effort and do not become editor errors.
-- [x] Each session starts a fresh log, with a session-start record naming the build version and process ID.
+- [x] Each session writes a lifecycle startup record. The logger opens `log.txt` in write mode, replacing records from previous sessions; the startup record does include build-version and process-ID metadata.
 - [x] Added `tests/test_logger.c` and registered the eleventh CTest target.
 - [x] Extended pseudo-terminal integration to verify character input and Dirty Flag transition records, and verify that Release/logging-disabled builds do not create a log file.
 - [x] Added `log.txt` and build directories to `.gitignore`.
 - [x] Updated README with log location, configuration, and behavior.
 
 - [x] Debug with diagnostics/logging, sanitizer-enabled, warning-clean, Release, and explicit logging-disabled configurations each pass all eleven CTest targets.
-- [x] Verified the Release pseudo-terminal run does not create `log.txt`; Debug runs record lifecycle and failure events.
+- [x] Verified the Release pseudo-terminal run does not create `log.txt`; development/Debug runs record lifecycle and failure events.

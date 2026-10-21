@@ -604,7 +604,6 @@ These are remaining scope boundaries, not claims that the corresponding features
 
 Continue from the verified Chapter 49 source. Implement file loading through the dedicated File Manager boundary. Keep file-system operations out of the Document, Cursor, Viewport, and Renderer modules. Follow the project's established encoding and line-ending decisions, and add focused tests for successful loading, empty files, invalid paths, and read failures before integrating the load operation into application initialization.
 
-
 ---
 
 ## Chapter 50 — Opening Files (Sections 50.1–50.8)
@@ -627,7 +626,6 @@ Verification performed for this snapshot: CMake configuration/build succeeded an
 
 Current verification: configure/build succeeds; `smoke`, `editing`, `file`, and `file_save` pass under CTest.
 
-
 ### Chapter 51 — Section 51.4: Event Loop Integration
 
 The current direct input loop recognizes Ctrl-S (`0x13`). The optional startup filename is passed into `application_event_loop()`. When it is non-NULL, Ctrl-S calls `editor_state_save_file()` with that path. The result is intentionally not used to terminate the loop: failed saves preserve the Dirty Flag through the Editor State API and the user can continue editing.
@@ -635,7 +633,6 @@ The current direct input loop recognizes Ctrl-S (`0x13`). The optional startup f
 This integration intentionally does not implement Save As for a new unnamed Document. It also does not print status text directly from `main.c`; doing so would create a competing terminal-output path before the Message Bar exists. Visible success/failure feedback is deferred to the interface chapter.
 
 Verification: CMake configuration/build succeeded and all four CTest targets (`smoke`, `editing`, `file`, `file_save`) passed. A pseudo-terminal check launched the application with a file, typed `X`, sent Ctrl-S and Ctrl-Q, then verified the destination contained `Xoriginal\n`.
-
 
 ### Chapter 51 — Section 51.5: Failure-Path Review
 
@@ -651,7 +648,6 @@ The Input Engine translates `InputEvent` values into `EditorCommand` values with
 
 Verification: Debug and warning-clean builds passed all seven CTest targets (`smoke`, `editing`, `file`, `file_save`, `input_parser`, `input_engine`, `command_engine`). A pseudo-terminal integration check verified insertion, Ctrl-S persistence, and Ctrl-Q exit. Next is Chapter 52.6 — integration review and key-binding boundary.
 
-
 ## Chapter 52 — Section 52.7: Filename Entry and Save As
 
 Ctrl-S now has two paths. If `EditorState.file_path` exists (or a startup save path is available), it saves to the associated path. If the document is unnamed, it activates bounded filename entry. The Status Bar changes to a `Save as:` prompt, and the Renderer positions the terminal cursor after the entered path. Printable input is encoded into UTF-8 bytes, Backspace removes the last encoded code point, Enter attempts the save, and standalone Escape cancels after the Input Handler's Escape timeout.
@@ -659,7 +655,6 @@ Ctrl-S now has two paths. If `EditorState.file_path` exists (or a startup save p
 `editor_state_save_as()` copies the candidate path before invoking `file_save_document()`. Only after the File Manager reports success does Editor State replace `file_path` and clear `is_dirty`. On failure, the filename prompt remains active so the user can correct the path or cancel; the existing file association, Document, and Dirty Flag remain unchanged. Cancellation clears only the transient filename-entry state and updates the Message Bar. The Command Engine ignores unrelated commands while the filename prompt is active.
 
 Verification: all eight CTest targets pass in Debug and with `-Wall -Wextra -Wpedantic -Werror`. Pseudo-terminal checks verified entering a path, saving `x\n`, exiting normally, and canceling filename entry with Escape. Known presentation limitation: non-ASCII filename bytes are rendered as `?` in the prompt/status row, although the UTF-8 path bytes are retained for filesystem operations.
-
 
 ## Chapter 52.8 — Interface Refinement and Unsaved-Changes Confirmation
 
@@ -671,20 +666,17 @@ Ctrl-Q checks the Dirty Flag. A clean document exits immediately. A dirty docume
 
 Verification: Debug and warning-clean builds pass all eight CTest targets. Pseudo-terminal checks verified filename insertion/movement/Delete and save, white-background/black-foreground Message Bar output, and dirty-quit confirmation, Escape cancellation, and discard.
 
-
 ## Chapter 53.2 — Terminal Sequences for Additional Keys
 
 The Input Parser now recognizes Home, End, Page Up, Page Down, and Tab without exposing raw terminal sequences to the rest of the editor. Home accepts CSI `H`, `1~`, and `7~`; End accepts CSI `F`, `4~`, and `8~`. Page navigation accepts CSI `5~` and `6~`, while Tab is emitted from byte `0x09`. Existing Delete parsing (`CSI 3~`) is retained.
 
 The parser tests cover each supported form. The Debug build and all eight CTest targets pass. This section deliberately changes only input recognition; command mapping and behavior will be implemented in subsequent sections.
 
-
 ## Chapter 53.3 — Home and End Navigation
 
 Added `cursor_move_home()` and `cursor_move_end()` to the Cursor module. Home sets the current logical column and preferred column to zero. End uses the current `DocumentLine.length`, which is measured in Unicode code points rather than UTF-8 bytes. Both operations leave the row unchanged and report whether the position changed. The Input Engine maps `INPUT_EVENT_HOME` and `INPUT_EVENT_END` to explicit navigation commands, and the Command Engine executes them against the current Cursor. Page Up, Page Down, and Tab are recognized as input events but intentionally remain no-op commands until their own implementation sections.
 
 Regression coverage now includes empty-line and boundary behavior, preferred-column updates, command-level redraw decisions, event-to-command mapping, and Home/End sequences through the parser-to-command pipeline. Verification: Debug build and all eight CTest targets pass.
-
 
 ## Chapter 53.4 — Delete-Key Editing
 
@@ -694,7 +686,6 @@ The Cursor is revalidated with `cursor_set_position()` after a successful mutati
 
 Regression tests cover deleting an ASCII character, deleting before a multi-byte Unicode code point, joining adjacent lines, preserving the join position, and doing nothing at the final document boundary. The input-pipeline test verifies `ESC [ 3 ~` reaches document editing. Debug and warning-clean builds pass all eight CTest targets.
 
-
 ## Chapter 53.5 — Page Up and Page Down Navigation
 
 `Cursor` now provides `cursor_move_page_up()` and `cursor_move_page_down()`. These operations reuse the existing vertical-movement helper, so the cursor moves by a requested number of logical rows while preserving `preferred_column`; a shorter destination line clamps the actual column without losing the preferred value. Movement clamps to the first and last Document rows and returns false when no position change is possible.
@@ -702,7 +693,6 @@ Regression tests cover deleting an ASCII character, deleting before a multi-byte
 `EditorCommand` now includes `page_rows`, used only by page-navigation commands. The Event Loop supplies the current `Renderer.document_rows`, which reflects the visible document area rather than the total terminal height. The Input Engine maps Page Up and Page Down to their commands, and the Command Engine invokes the Cursor operations. Page movement does not edit text or change the Dirty Flag.
 
 Regression coverage exercises page-sized movement, top/bottom boundaries, short-line clamping and preferred-column recovery, redraw behavior, and `ESC [ 5 ~` / `ESC [ 6 ~` through the complete input pipeline. Verification: a Debug build with `-Wall -Wextra -Wpedantic -Werror` succeeds and all eight CTest targets pass.
-
 
 ## Chapter 53.6 — Tab Insertion and Configured Tab Width
 
@@ -714,7 +704,6 @@ The Renderer expands each U+0009 into spaces through the next tab stop. A public
 
 Tests cover the default tab width, a non-default width, visual cursor mapping, spaces in the Screen Buffer, Tab event-to-command mapping, insertion through the complete input pipeline, and the existing regression suite. Verification: Debug and warning-clean builds (`-Wall -Wextra -Wpedantic -Werror`) pass all eight CTest targets. A pseudo-terminal check inserted `a`, Tab, and `b`, saved with Ctrl-S, and exited with Ctrl-Q; the saved file contained `a\tb\n`.
 
-
 ## Chapter 53.7 — UTF-8 Keyboard Input and Character-Boundary Editing
 
 The Input Parser accumulates UTF-8 lead and continuation bytes and emits `INPUT_EVENT_CHARACTER` only when a complete valid Unicode scalar value has been decoded. Tests now cover two-byte U+00E9, three-byte U+20AC, and four-byte U+1F600 input. Invalid leading bytes, overlong sequences, UTF-16 surrogate values, values above U+10FFFF, interrupted sequences, and timeouts do not produce partial character events. If a non-continuation byte arrives during a sequence, the incomplete scalar is discarded and that byte is parsed again as a possible independent key.
@@ -722,7 +711,6 @@ The Input Parser accumulates UTF-8 lead and continuation bytes and emits `INPUT_
 The Document stores `uint32_t` code points in each logical line; `DocumentLine.length` and `Cursor.column` are logical code-point counts, not UTF-8 byte offsets. The Command Engine's Backspace and Delete operations call Document operations at these logical positions. Added tests prove that a four-byte UTF-8 sequence inserts one code point and that Backspace removes it in one operation, updating the Cursor by one logical column. Existing Delete tests cover deletion of a multi-byte character at the cursor.
 
 Verification: configured a fresh Debug build with `-Wall -Wextra -Wpedantic -Werror`, compiled all targets, and passed all eight CTest targets. This section verifies input decoding and logical editing boundaries; it does not yet implement terminal display-width calculations for wide or combining characters, which are addressed by Section 53.8.
-
 
 ## Chapter 53.8 — Logical Cursor Positions and Visual Display Columns
 
@@ -733,7 +721,6 @@ Verification: configured a fresh Debug build with `-Wall -Wextra -Wpedantic -Wer
 - Updated the renderer cursor mapping and retained the existing Viewport interface, which receives visual display columns.
 - Added a regression test for CJK wide width, combining-mark attachment, terminal UTF-8 output, and cursor positioning.
 
-
 ## Chapter 53.9 — Input Engine and Command Engine Integration
 
 The integration audit confirmed the existing production path remains layered: the Input Parser recognizes raw terminal bytes and emits abstract events, the Input Engine translates each event to an `EditorCommand`, the Event Loop supplies the visible page height for page-navigation commands, and the Command Engine performs state changes. No production-code change was required for this milestone; the remaining gaps were integration-level regression coverage.
@@ -742,7 +729,6 @@ The integration audit confirmed the existing production path remains layered: th
 
 Verification: configured and built Debug and warning-clean configurations with `-Wall -Wextra -Wpedantic -Werror`; all eight CTest targets pass in both. A pseudo-terminal run exercised printable input, alternate Home/End, Page Up/Down, Tab, and dirty-quit discard; the editor exited successfully and restored the alternate screen. No new unresolved implementation issue was identified.
 
-
 ## Chapter 53.10 — Boundary, Regression, and Pseudo-Terminal Tests
 
 Added `test_delete_boundaries_through_pipeline()` to `tests/test_input_pipeline.c`. The test sends the terminal Delete sequence (`ESC [ 3 ~`) through the Input Parser, Input Engine, and Command Engine. At the end of the final empty line, Delete leaves the Document clean and unchanged and requests no redraw. After Enter creates a second empty line, moving to the first line and pressing Delete merges the following line, leaves the Cursor at the join point, sets the Dirty Flag, and requests redraw.
@@ -750,7 +736,6 @@ Added `test_delete_boundaries_through_pipeline()` to `tests/test_input_pipeline.
 The existing test suite also covers Home/End boundaries, Page Up/Down clamping and preferred-column recovery, Unicode scalar input and code-point deletion, configured Tab display columns, zero-line Document behavior, viewport boundary validation, and filename-entry isolation. No production-code change was needed in this section.
 
 Verification performed from a fresh build directory: Debug CMake build and all eight CTest targets passed. A separate warning-clean build using `-Wall -Wextra -Wpedantic -Werror` also passed all eight targets. A pseudo-terminal session sent `abc`, Home, Delete, End, Tab, Ctrl-S, a temporary filename, Enter, and Ctrl-Q. The saved file contained exactly `bc\t\n`; the process exited successfully and emitted the alternate-screen restoration sequence.
-
 
 ## Chapter 53.11 — Resulting Implementation State
 
@@ -775,7 +760,6 @@ A fresh Debug build was configured with `cmake -S . -B build -DCMAKE_BUILD_TYPE=
 
 Chapter 53 completes the established keyboard editing and navigation baseline; it does not claim terminal resize handling, allocation-failure hardening, a complete Unicode grapheme-width database, non-ASCII filename rendering, configuration-file parsing or command-line configuration overrides, or incremental rendering. These remain recorded as limitations for subsequent hardening.
 
-
 ## Follow-up — Status Bar and Visual Vertical Navigation
 
 The Status Bar now renders `Ln N, Col N, Visual N`. All displayed coordinates are one-based: `Col` counts logical Document code points, while `Visual` counts terminal display columns after tab expansion and Unicode width rules. The renderer obtains the visual position from the shared `text/text_layout` module.
@@ -783,7 +767,6 @@ The Status Bar now renders `Ln N, Col N, Visual N`. All displayed coordinates ar
 Added `Cursor.preferred_visual_column` and its validity flag. Horizontal navigation and editing invalidate the visual preference; the next vertical move derives it from the current logical position. Up/Down/Page Up/Page Down then preserve that visual target across lines, mapping it to the nearest valid logical boundary. When the destination line is short, the actual cursor clamps to its end while the preferred visual column remains unchanged, so moving back to a longer line restores the intended position. The nearest-boundary policy chooses the boundary before a character when distances tie. Tabs remain stored as U+0009; this change does not rewrite document contents.
 
 Regression coverage verifies Status Bar reporting after a tab and vertical movement from a line containing a tab through another tabbed line and a short line, then back again. Debug build and all eight CTest targets pass.
-
 
 ## Chapter 54 — Hardening the Editor
 
@@ -797,7 +780,6 @@ The invariant checks are kept in `tests/test_editing.c`; they do not add diagnos
 
 Verification: Debug, AddressSanitizer/UndefinedBehaviorSanitizer, and warning-clean builds each pass all eight CTest targets. This does not yet prove allocation-failure recovery for every allocation site; deterministic allocation-failure injection remains a later hardening task.
 
-
 ## Chapter 54.3 — File Failure Hardening
 
 The File Manager now validates the Document's active storage metadata before serializing it. The check runs before the serializer dereferences the line array, preventing malformed line-count, capacity, length, or buffer metadata from causing an out-of-bounds read during a save attempt. The validation is local to the File Manager and introduces no new public interface.
@@ -808,16 +790,13 @@ Regression tests verify that malformed storage is rejected while the destination
 
 Introduced `src/diagnostics/diagnostics.h` and `src/diagnostics/diagnostics.c`. `TEDIT_ASSERT` is used for internal invariants, and optional diagnostic errors are controlled by `TEDIT_ENABLE_DIAGNOSTICS`. Document mutation routines assert storage consistency after successful mutations. The later Diagnostic Logging follow-up routes persistent records to `log.txt` rather than mixing them with the terminal UI. Public API argument errors remain normal return-value paths rather than assertion failures.
 
-
 Release test verification exposed that test expressions inside `assert()` were removed by `NDEBUG`, causing the tests to skip required operations and fail. CMake now applies `-UNDEBUG` to test targets on GCC/Clang only; production targets retain the selected build type behavior. This keeps Release tests meaningful without changing the editor's Release configuration.
-
 
 ## Chapter 54.5 — Malformed Input and Parser Recovery
 
 The Input Parser previously abandoned an incomplete CSI sequence when a control byte arrived, but did not parse that byte again. As a result, a standalone control key such as Ctrl-S could be swallowed if it arrived while the parser was in `INPUT_PARSER_CSI` or `INPUT_PARSER_CSI_PARAMETER`. The parser now resets the incomplete sequence and reprocesses control bytes from the normal state. Unknown printable CSI final bytes continue to be ignored so escape-sequence fragments are not inserted as text.
 
 Added regression tests for Ctrl-S interrupting a numeric CSI parameter, Escape restarting after an incomplete CSI prefix, an oversized numeric CSI parameter followed by valid printable input, and null arguments to parser feed/timeout APIs. Existing UTF-8 malformed-sequence and timeout-recovery tests remain in place. Verification: Debug with diagnostics, AddressSanitizer/UndefinedBehaviorSanitizer with leak detection, warning-clean (`-Wall -Wextra -Wpedantic -Werror`), and Release builds each pass all eight CTest targets.
-
 
 ## Chapter 54.6 — Terminal Restoration and Resize Handling
 
@@ -829,18 +808,24 @@ Added `tests/test_terminal.c` for null output parameters and null cleanup pointe
 
 ## Chapter 54.7 — Interactive Failure-Path Verification and Final Hardening Review
 
-Added `tests/test_pty_integration.py` and registered it as `pty_integration` when CMake finds a Python 3 interpreter on UNIX. The test launches the real `tedit` executable attached to a pseudo-terminal and checks clean Ctrl-Q shutdown, recognized input and Dirty Flag logging, a valid terminal resize, SIGINT/SIGTERM/SIGHUP termination, and startup failure while opening a missing file. It retains the startup output while checking cleanup output, verifies the alternate-screen exit and terminal wrap-mode restoration sequences, and compares the terminal attributes after process exit with the attributes captured before launch.
+Added `tests/test_pty_integration.py` and registered it as `pty_integration` when CMake finds a Python 3 interpreter on UNIX. The test launches the real `tedit` executable attached to a pseudo-terminal and checks clean Ctrl-Q shutdown, a valid terminal resize, SIGINT/SIGTERM/SIGHUP termination, and startup failure while opening a missing file. The later Diagnostic Logging follow-up extended this integration test to verify input-event and Dirty Flag log records. It retains the startup output while checking cleanup output, verifies the alternate-screen exit and terminal wrap-mode restoration sequences, and compares the terminal attributes after process exit with the attributes captured before launch.
 
 The integration test is part of the ordinary CTest suite rather than a manual-only verification step. A 20-second CTest timeout prevents a hung editor process from blocking the suite indefinitely. Python is optional at configuration time, so core builds do not gain a mandatory Python dependency; systems without Python 3 simply omit this integration target.
 
 Verification: Debug with diagnostics, AddressSanitizer/UndefinedBehaviorSanitizer with leak detection, warning-clean (`-Wall -Wextra -Wpedantic -Werror`), and Release builds each pass all ten CTest targets. The test suite does not inject allocator failures or force terminal `write()` failures; those remain explicit limits rather than claimed coverage. No Git commit was created because this working copy was extracted from an archive without repository metadata.
 
-
-
 ## Follow-up — Diagnostic Logging to `log.txt`
 
-The logger is a separate `common` module and remains an observer: it does not own editor data, consume input, or affect command decisions. `logger_init()` opens the configured path with truncation so each session starts a fresh log, writes a session-start record naming the build version and process ID, and returns failure to the caller, but the application intentionally ignores that result so an unavailable log file cannot prevent editing. The logger uses buffered stdio and does not flush each record; `logger_shutdown()` attempts a final flush and close without propagating logging failures into application behavior. After a write error, further records are disabled for that logger session.
+The logger is implemented as the separate `src/common/logger.{h,c}` module. It is an observer: it does not own Editor State, consume terminal input, or make command decisions. `logger_init()` opens the supplied path in **write mode**, so existing records are replaced. The application uses `log.txt` relative to the process's current working directory. Initialization failure is non-fatal; the application can continue editing without a log. The logger uses buffered stdio rather than flushing every record, and `logger_shutdown()` attempts to flush and close the stream. If a write fails, the logger disables further records for that session. Logging failures are not propagated into editor behavior.
 
-Each record contains local timestamp, severity, component, and formatted message. The minimum level is DEBUG in non-`NDEBUG` builds and INFO in builds with `NDEBUG`; Release configuration compiles application log macros to no-ops by default. The log records lifecycle transitions, recognized input events (characters as code points, not text content), commands, file load/save outcomes, Dirty Flag transitions, terminal restoration errors, and render/resize failures. No document contents are logged. The runtime path is `log.txt` relative to the process working directory and is ignored by Git.
+Each record contains a local timestamp, severity, component name, and formatted message. The supported levels are `ERROR`, `WARN`, `INFO`, and `DEBUG`. Debug builds use the DEBUG threshold; builds with `NDEBUG` use INFO as the logger's default threshold, while the Release CMake configuration compiles application logging macros to no-ops by default. The `TEDIT_ENABLE_LOGGING` CMake option controls whether logging is enabled outside Release; `-DTEDIT_ENABLE_LOGGING=OFF` disables application logging explicitly. The log records lifecycle events, recognized input events (characters as Unicode code points, not text content), commands, file load/save outcomes, Dirty Flag transitions, terminal restoration errors, and rendering/resize failures. Document contents are not logged. `log.txt` and build directories are ignored by Git.
 
-`tests/test_logger.c` covers severity filtering, timestamps, per-session truncation and the session-start record, invalid/unavailable paths, and best-effort behavior when a platform provides `/dev/full`. The pseudo-terminal integration test edits a character, initiates quit confirmation, and discards the edit; it verifies that the recognized code point and clean-to-dirty transition are logged without recording the text content. The same integration case verifies that Release and explicitly logging-disabled builds do not create `log.txt`. Debug, sanitizer-enabled, warning-clean, Release, and logging-disabled configurations each pass eleven of eleven tests.
+`tests/test_logger.c` covers severity filtering, timestamped records, invalid/unavailable paths, and best-effort handling of write failure where `/dev/full` is available. The pseudo-terminal integration test verifies that recognized character input and the clean-to-dirty transition appear in the Debug log without exposing the character's text content. It also verifies that Release and explicitly logging-disabled configurations do not create a log file. With Python 3 available on a POSIX system, CTest registers ten C test targets plus the `pty_integration` test, for eleven tests total. Debug with diagnostics/logging, AddressSanitizer/UndefinedBehaviorSanitizer, warning-clean (`-Wall -Wextra -Wpedantic -Werror`), Release, and explicit logging-disabled configurations each pass all eleven tests in the verified repository snapshot.
+
+### Current implementation snapshot
+
+- Chapters 45–53.11 are implemented for the current baseline, and Chapter 54 hardening is complete for the tested scope.
+- Diagnostic logging is implemented as a follow-up to Chapter 54; Chapter 55 — Final Integration and Release is the next milestone.
+- Remaining hardening gaps include deterministic allocation-failure injection and exhaustive terminal-output-write failure testing. Unicode grapheme/terminal-width differences and non-ASCII filename display remain known limitations.
+- The logger currently uses the fixed application path `log.txt`; configurable log paths and per-record flushing are not implemented. Buffered records can be lost if a write or process failure occurs before a successful flush.
+- The logger emits a session-start record, build version, or process ID.
