@@ -47,7 +47,22 @@ typedef struct
  */
 bool terminal_init(TerminalState *terminal);
 
-/* Query current terminal dimensions without changing TerminalState. */
+/*
+ * Query the current terminal dimensions without modifying TerminalState.
+ *
+ * The out-parameters are written only when the query succeeds and both
+ * dimensions are nonzero, so a caller can keep the previous size on failure.
+ *
+ * Parameters:
+ *   rows    - out-parameter: receives the terminal height in text rows;
+ *             must not be NULL.
+ *   columns - out-parameter: receives the terminal width in text columns;
+ *             must not be NULL.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments or if the dimensions could not
+ *   be determined.
+ */
 bool terminal_get_size(size_t *rows, size_t *columns);
 
 /*

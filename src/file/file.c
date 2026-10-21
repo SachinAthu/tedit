@@ -29,6 +29,12 @@ typedef struct
 /*
  * Release a FileByteBuffer's storage and reset its fields so it can no
  * longer be used.
+ *
+ * Parameters:
+ *   buffer - the buffer to release; may be NULL.
+ *
+ * Returns:
+ *   void.
  */
 static void file_byte_buffer_destroy(FileByteBuffer *buffer)
 {
@@ -276,6 +282,9 @@ static size_t file_decode_utf8(const unsigned char *bytes, size_t length, size_t
  * This is best-effort and cannot fail. If the document is NULL or has no
  * lines, or its last line is empty or does not end in CR, it simply does
  * nothing.
+ *
+ * Parameters:
+ *   document - the document whose last line is inspected; may be NULL.
  */
 static void file_remove_trailing_carriage_return(Document *document)
 {

@@ -8,7 +8,20 @@
 #define INITIAL_LINE_CAPACITY 16
 #define INITIAL_DOCUMENT_CAPACITY 8
 
-/* Validate owned storage without changing the Document. */
+/*
+ * Validate the Document's owned storage without changing it.
+ *
+ * Checks that the line array and each line's byte buffer have consistent
+ * length/capacity metadata. This is used by ASSERT_DOCUMENT_VALID to catch
+ * internal corruption during development without performing a deep scan of
+ * the actual contents.
+ *
+ * Parameters:
+ *   document - the Document to inspect; may be NULL (reported as invalid).
+ *
+ * Returns:
+ *   true if the storage metadata is internally consistent, false otherwise.
+ */
 static bool document_storage_is_valid(const Document *document)
 {
     if (document == NULL || document->line_count > document->line_capacity)

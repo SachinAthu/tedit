@@ -169,6 +169,12 @@ static bool file_output_code_point(FileOutputBuffer *buffer, uint32_t code_point
  * array or any line buffer. This is particularly important when the editor
  * is already recovering from a programming error: a failed save must not
  * turn corrupt state into an out-of-bounds read.
+ *
+ * Parameters:
+ *   document - the Document to validate; may be NULL (reported as invalid).
+ *
+ * Returns:
+ *   true if the storage metadata is consistent, false otherwise.
  */
 static bool file_document_storage_is_valid(const Document *document)
 {

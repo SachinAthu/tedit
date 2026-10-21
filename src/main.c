@@ -37,56 +37,108 @@ static struct sigaction previous_term_action;
 static struct sigaction previous_hup_action;
 static bool signal_handlers_installed = false;
 
+/*
+ * Return a human-readable name for an input event, used only in log output.
+ * Unknown values are reported as "unknown" so a bad enum value never crashes
+ * a logging call.
+ */
 static const char *application_input_event_name(InputEventType type)
 {
     switch (type)
     {
-    case INPUT_EVENT_NONE: return "none";
-    case INPUT_EVENT_CHARACTER: return "character";
-    case INPUT_EVENT_CTRL_Q: return "ctrl-q";
-    case INPUT_EVENT_CTRL_S: return "ctrl-s";
-    case INPUT_EVENT_BACKSPACE: return "backspace";
-    case INPUT_EVENT_ENTER: return "enter";
-    case INPUT_EVENT_ESCAPE: return "escape";
-    case INPUT_EVENT_ARROW_LEFT: return "left";
-    case INPUT_EVENT_ARROW_RIGHT: return "right";
-    case INPUT_EVENT_ARROW_UP: return "up";
-    case INPUT_EVENT_ARROW_DOWN: return "down";
-    case INPUT_EVENT_HOME: return "home";
-    case INPUT_EVENT_END: return "end";
-    case INPUT_EVENT_PAGE_UP: return "page-up";
-    case INPUT_EVENT_PAGE_DOWN: return "page-down";
-    case INPUT_EVENT_TAB: return "tab";
-    case INPUT_EVENT_DELETE: return "delete";
-    default: return "unknown";
+    case INPUT_EVENT_NONE:
+        return "none";
+    case INPUT_EVENT_CHARACTER:
+        return "character";
+    case INPUT_EVENT_CTRL_Q:
+        return "ctrl-q";
+    case INPUT_EVENT_CTRL_S:
+        return "ctrl-s";
+    case INPUT_EVENT_BACKSPACE:
+        return "backspace";
+    case INPUT_EVENT_ENTER:
+        return "enter";
+    case INPUT_EVENT_ESCAPE:
+        return "escape";
+    case INPUT_EVENT_ARROW_LEFT:
+        return "left";
+    case INPUT_EVENT_ARROW_RIGHT:
+        return "right";
+    case INPUT_EVENT_ARROW_UP:
+        return "up";
+    case INPUT_EVENT_ARROW_DOWN:
+        return "down";
+    case INPUT_EVENT_HOME:
+        return "home";
+    case INPUT_EVENT_END:
+        return "end";
+    case INPUT_EVENT_PAGE_UP:
+        return "page-up";
+    case INPUT_EVENT_PAGE_DOWN:
+        return "page-down";
+    case INPUT_EVENT_TAB:
+        return "tab";
+    case INPUT_EVENT_DELETE:
+        return "delete";
+    default:
+        return "unknown";
     }
 }
 
+/*
+ * Return a human-readable name for an editor command, used only in log
+ * output. Unknown values are reported as "unknown".
+ */
 static const char *application_command_name(EditorCommandType type)
 {
     switch (type)
     {
-    case EDITOR_COMMAND_NONE: return "none";
-    case EDITOR_COMMAND_INSERT_CHARACTER: return "insert-character";
-    case EDITOR_COMMAND_INSERT_TAB: return "insert-tab";
-    case EDITOR_COMMAND_BACKSPACE: return "backspace";
-    case EDITOR_COMMAND_INSERT_NEWLINE: return "insert-newline";
-    case EDITOR_COMMAND_CANCEL: return "cancel";
-    case EDITOR_COMMAND_MOVE_LEFT: return "move-left";
-    case EDITOR_COMMAND_MOVE_RIGHT: return "move-right";
-    case EDITOR_COMMAND_MOVE_UP: return "move-up";
-    case EDITOR_COMMAND_MOVE_DOWN: return "move-down";
-    case EDITOR_COMMAND_PAGE_UP: return "page-up";
-    case EDITOR_COMMAND_PAGE_DOWN: return "page-down";
-    case EDITOR_COMMAND_MOVE_HOME: return "home";
-    case EDITOR_COMMAND_MOVE_END: return "end";
-    case EDITOR_COMMAND_DELETE_CHARACTER: return "delete";
-    case EDITOR_COMMAND_SAVE: return "save";
-    case EDITOR_COMMAND_QUIT: return "quit";
-    default: return "unknown";
+    case EDITOR_COMMAND_NONE:
+        return "none";
+    case EDITOR_COMMAND_INSERT_CHARACTER:
+        return "insert-character";
+    case EDITOR_COMMAND_INSERT_TAB:
+        return "insert-tab";
+    case EDITOR_COMMAND_BACKSPACE:
+        return "backspace";
+    case EDITOR_COMMAND_INSERT_NEWLINE:
+        return "insert-newline";
+    case EDITOR_COMMAND_CANCEL:
+        return "cancel";
+    case EDITOR_COMMAND_MOVE_LEFT:
+        return "move-left";
+    case EDITOR_COMMAND_MOVE_RIGHT:
+        return "move-right";
+    case EDITOR_COMMAND_MOVE_UP:
+        return "move-up";
+    case EDITOR_COMMAND_MOVE_DOWN:
+        return "move-down";
+    case EDITOR_COMMAND_PAGE_UP:
+        return "page-up";
+    case EDITOR_COMMAND_PAGE_DOWN:
+        return "page-down";
+    case EDITOR_COMMAND_MOVE_HOME:
+        return "home";
+    case EDITOR_COMMAND_MOVE_END:
+        return "end";
+    case EDITOR_COMMAND_DELETE_CHARACTER:
+        return "delete";
+    case EDITOR_COMMAND_SAVE:
+        return "save";
+    case EDITOR_COMMAND_QUIT:
+        return "quit";
+    default:
+        return "unknown";
     }
 }
 
+/*
+ * Shared handler for the signals we install. A signal can arrive between any
+ * two machine instructions, so it must do almost nothing: it only sets a
+ * `volatile sig_atomic_t` flag, which the C standard guarantees is safe to
+ * modify from an asynchronous handler. The main loop checks these flags and
+ * performs the actual work (resize, cleanup, exit) at a safe point.
+ */
 static void application_signal_handler(int signal_number)
 {
     if (signal_number == SIGWINCH)
@@ -99,6 +151,13 @@ static void application_signal_handler(int signal_number)
     }
 }
 
+/*
+ * Install handlers for the signals the editor must react to: window resize
+ * (SIGWINCH) and termination (SIGINT, SIGTERM, SIGHUP). The previous handler
+ * for each signal is saved so it can be restored on exit. If installing one
+ * handler fails, any already-installed handlers are rolled back before
+ * returning false.
+ */
 static bool application_install_signal_handlers(void)
 {
     struct sigaction action;
@@ -135,6 +194,11 @@ static bool application_install_signal_handlers(void)
     return true;
 }
 
+/*
+ * Put back the signal handlers that were active before the editor started.
+ * This is the reverse of application_install_signal_handlers() and is safe
+ * to call even if no handlers were installed.
+ */
 static void application_restore_signal_handlers(void)
 {
     if (!signal_handlers_installed)
@@ -247,10 +311,18 @@ static bool redraw_after_action(Renderer *renderer, EditorState *state)
  * allocated first, so allocation failure leaves the existing Renderer valid
  * for cleanup. The terminal dimensions are committed only after initialization
  * succeeds.
+ *
+ * Parameters:
+ *   terminal - the terminal state whose dimensions are re-read.
+ *   state    - the editor state to redraw after resizing.
+ *   renderer - the renderer to replace; on success it holds the new frame
+ *              buffer.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, an unchanged or unusably small
+ *   terminal size, allocation failure, or a redraw failure.
  */
-static bool application_handle_resize(TerminalState *terminal,
-                                      EditorState *state,
-                                      Renderer *renderer)
+static bool application_handle_resize(TerminalState *terminal, EditorState *state, Renderer *renderer)
 {
     size_t rows;
     size_t columns;
@@ -306,6 +378,7 @@ static bool application_handle_resize(TerminalState *terminal,
  * changed.
  *
  * Parameters:
+ *   terminal  - the terminal state used to query dimensions on resize.
  *   state     - the editor state to operate on.
  *   renderer  - the renderer used to redraw after each command.
  *   save_path - path passed on the command line; used as the save target
@@ -315,10 +388,7 @@ static bool application_handle_resize(TerminalState *terminal,
  * Returns:
  *   true when the user quit normally, false on an unrecoverable error.
  */
-static bool application_event_loop(TerminalState *terminal,
-                                   EditorState *state,
-                                   Renderer *renderer,
-                                   const char *save_path)
+static bool application_event_loop(TerminalState *terminal, EditorState *state, Renderer *renderer, const char *save_path)
 {
     InputParser parser;
     input_parser_init(&parser);
@@ -415,8 +485,7 @@ static bool application_event_loop(TerminalState *terminal,
         {
             if (event.type == INPUT_EVENT_CHARACTER)
             {
-                TEDIT_LOG_DEBUG("input", "recognized event=%s codepoint=U+%04X",
-                                application_input_event_name(event.type), (unsigned int)event.character);
+                TEDIT_LOG_DEBUG("input", "recognized event=%s codepoint=U+%04X", application_input_event_name(event.type), (unsigned int)event.character);
             }
             else
             {
@@ -443,14 +512,12 @@ static bool application_event_loop(TerminalState *terminal,
 
         if (!command_engine_execute(state, &command, save_path, &redraw, &should_quit))
         {
-            TEDIT_LOG_ERROR("command", "Command Engine failed for command=%s",
-                            application_command_name(command.type));
+            TEDIT_LOG_ERROR("command", "Command Engine failed for command=%s", application_command_name(command.type));
             return false;
         }
         if (redraw && !redraw_after_action(renderer, state))
         {
-            TEDIT_LOG_ERROR("renderer", "redraw failed after command=%s",
-                            application_command_name(command.type));
+            TEDIT_LOG_ERROR("renderer", "redraw failed after command=%s", application_command_name(command.type));
             return false;
         }
         if (should_quit)
@@ -548,8 +615,7 @@ int main(int argc, char *argv[])
     }
     if (terminal.columns < 2 || !renderer_init(&renderer, terminal.rows, terminal.columns - 1))
     {
-        TEDIT_LOG_ERROR("renderer", "initialization failed for terminal rows=%zu columns=%zu",
-                        terminal.rows, terminal.columns);
+        TEDIT_LOG_ERROR("renderer", "initialization failed for terminal rows=%zu columns=%zu", terminal.rows, terminal.columns);
         goto cleanup;
     }
     TEDIT_LOG_INFO("renderer", "initialized rows=%zu columns=%zu", terminal.rows, terminal.columns - 1);

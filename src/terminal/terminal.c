@@ -130,6 +130,14 @@ bool terminal_init(TerminalState *terminal)
  * Output parameters are only updated when the ioctl succeeds and both
  * dimensions are nonzero. Keeping the old values on failure lets callers
  * prepare a resized Renderer transactionally.
+ *
+ * Parameters:
+ *   rows    - out-parameter: receives the terminal height; must not be NULL.
+ *   columns - out-parameter: receives the terminal width; must not be NULL.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments or if the dimensions could not
+ *   be determined.
  */
 bool terminal_get_size(size_t *rows, size_t *columns)
 {

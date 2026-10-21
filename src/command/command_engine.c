@@ -7,6 +7,17 @@
 
 #include <string.h>
 
+/*
+ * Mark the document as having unsaved changes.
+ *
+ * The Dirty Flag records that the in-memory document differs from what is on
+ * disk. It is set only after a mutation actually succeeds, and it is cleared
+ * by a successful save. This helper also logs the transition when the flag
+ * changes from clean to dirty.
+ *
+ * Parameters:
+ *   state - the editor state to update; may be NULL (a no-op).
+ */
 static void command_mark_document_dirty(EditorState *state)
 {
     if (state != NULL && !state->is_dirty)

@@ -16,7 +16,8 @@
  *                    separator, Message Bar, and bottom Status Bar.
  *   - output_buffer: a reusable byte buffer that holds the frame (escape
  *                    sequences plus characters) about to be written out.
- *   - output_capacity: how many bytes output_buffer currently holds.
+ *   - output_capacity: the allocated size of output_buffer in bytes, i.e.
+ *                      how many bytes it can currently hold.
  */
 typedef struct
 {
@@ -79,8 +80,14 @@ bool renderer_render(Renderer *renderer, const EditorState *state);
  * use the active locale's POSIX wcwidth() result; combining marks occupy no
  * additional columns and wide characters occupy two.
  *
- * Returns true on success, false for invalid state, invalid tab width, or
- * arithmetic overflow.
+ * Parameters:
+ *   state         - the editor state to inspect; must not be NULL.
+ *   visual_column - out-parameter: receives the zero-based visual column;
+ *                   must not be NULL.
+ *
+ * Returns:
+ *   true on success, false for invalid state, invalid tab width, or
+ *   arithmetic overflow.
  */
 bool renderer_cursor_visual_column(const EditorState *state, size_t *visual_column);
 

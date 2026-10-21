@@ -93,10 +93,43 @@ bool screen_buffer_set(ScreenBuffer *buffer, size_t row, size_t column, uint32_t
  */
 const ScreenCell *screen_buffer_get(const ScreenBuffer *buffer, size_t row, size_t column);
 
-/* Mark a cell as the second column occupied by a wide code point. */
+/*
+ * Mark a cell as the second column occupied by a wide code point.
+ *
+ * A wide character (for example a CJK ideograph or an emoji) occupies two
+ * terminal columns. The first column holds the character itself; this helper
+ * fills the following column with a blank space and sets the continuation
+ * flag so the renderer skips it when writing the frame.
+ *
+ * Parameters:
+ *   buffer - the buffer to write into.
+ *   row    - the zero-based row of the trailing cell.
+ *   column - the zero-based column of the trailing cell.
+ *
+ * Returns:
+ *   true on success, false if `buffer` is NULL/unallocated or the
+ *   coordinates are out of range.
+ */
 bool screen_buffer_set_continuation(ScreenBuffer *buffer, size_t row, size_t column);
 
-/* Append a zero-width combining code point to an existing base cell. */
+/*
+ * Append a zero-width combining code point to an existing base cell.
+ *
+ * A combining mark (such as an accent) has zero display width and renders
+ * together with the preceding base character, so it is stored in the same
+ * cell rather than in a cell of its own. The per-cell list of marks grows on
+ * demand.
+ *
+ * Parameters:
+ *   buffer     - the buffer to write into.
+ *   row        - the zero-based row of the base cell.
+ *   column     - the zero-based column of the base cell.
+ *   code_point - the combining code point to attach.
+ *
+ * Returns:
+ *   true on success, false if `buffer` is NULL/unallocated, the coordinates
+ *   are out of range, or the mark list could not be grown.
+ */
 bool screen_buffer_append_combining(ScreenBuffer *buffer, size_t row, size_t column, uint32_t code_point);
 
 #endif

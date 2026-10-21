@@ -112,18 +112,37 @@ bool cursor_move_home(Cursor *cursor);
  */
 bool cursor_move_end(Cursor *cursor, const Document *document);
 
-/* Recompute the remembered visual column from the current logical position. */
+/*
+ * Recompute the remembered visual column from the current logical position.
+ *
+ * The preferred visual column is the display column the cursor keeps while
+ * moving vertically across lines of differing tab/width layout, so that the
+ * cursor does not drift left or right merely because one line is wider than
+ * another. This function re-derives it from the current row and column and
+ * marks the stored value valid.
+ *
+ * Parameters:
+ *   cursor    - the cursor to update.
+ *   document  - the document the cursor refers to.
+ *   tab_width - the configured tab stop width; must be greater than 0.
+ *
+ * Returns:
+ *   true on success, false on NULL arguments, a tab width of 0, a cursor row
+ *   out of range, or an inconsistent line.
+ */
 bool cursor_update_preferred_visual_column(Cursor *cursor, const Document *document, size_t tab_width);
 
 /*
  * Move the cursor up one line, preserving the preferred visual column.
  *
  * Parameters:
- *   cursor   - the cursor to move.
- *   document - the document the cursor refers to.
+ *   cursor    - the cursor to move.
+ *   document  - the document the cursor refers to.
+ *   tab_width - the configured tab stop width; must be greater than 0.
  *
  * Returns:
- *   true if the cursor moved up, false if it is already on the first line.
+ *   true if the cursor moved up, false on NULL arguments or if the cursor is
+ *   already on the first line.
  */
 bool cursor_move_up(Cursor *cursor, const Document *document, size_t tab_width);
 
@@ -135,6 +154,7 @@ bool cursor_move_up(Cursor *cursor, const Document *document, size_t tab_width);
  *   cursor    - the cursor to move.
  *   document  - the document the cursor refers to.
  *   page_rows - the number of document rows in one visible page; must be > 0.
+ *   tab_width - the configured tab stop width; must be greater than 0.
  *
  * Returns:
  *   true if the cursor position changed, false for invalid arguments or when
@@ -150,6 +170,7 @@ bool cursor_move_page_up(Cursor *cursor, const Document *document, size_t page_r
  *   cursor    - the cursor to move.
  *   document  - the document the cursor refers to.
  *   page_rows - the number of document rows in one visible page; must be > 0.
+ *   tab_width - the configured tab stop width; must be greater than 0.
  *
  * Returns:
  *   true if the cursor position changed, false for invalid arguments or when
@@ -161,11 +182,13 @@ bool cursor_move_page_down(Cursor *cursor, const Document *document, size_t page
  * Move the cursor down one line, preserving the preferred visual column.
  *
  * Parameters:
- *   cursor   - the cursor to move.
- *   document - the document the cursor refers to.
+ *   cursor    - the cursor to move.
+ *   document  - the document the cursor refers to.
+ *   tab_width - the configured tab stop width; must be greater than 0.
  *
  * Returns:
- *   true if the cursor moved down, false if it is already on the last line.
+ *   true if the cursor moved down, false on NULL arguments or if the cursor
+ *   is already on the last line.
  */
 bool cursor_move_down(Cursor *cursor, const Document *document, size_t tab_width);
 
