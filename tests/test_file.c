@@ -1,6 +1,7 @@
 
 #define _POSIX_C_SOURCE 200809L
 
+#include "command/command_engine.h"
 #include "document/document.h"
 #include "file/file.h"
 #include "state/editor_state.h"
@@ -178,7 +179,7 @@ static void test_editor_state_load_resets_cursor_viewport_and_dirty_flag(void)
     state.viewport.viewport_column = 9;
     state.is_dirty = true;
 
-    assert(editor_state_load_file(&state, path));
+    assert(command_engine_load_file(&state, path));
     assert(state.document.line_count == 2);
     assert(state.cursor.row == 0);
     assert(state.cursor.column == 0);
@@ -215,7 +216,7 @@ static void test_editor_state_failed_load_preserves_state(void)
     assert(state.file_path != NULL);
     memcpy(state.file_path, "original.txt", sizeof("original.txt"));
 
-    assert(!editor_state_load_file(&state, "/tmp/tedit-no-such-file"));
+    assert(!command_engine_load_file(&state, "/tmp/tedit-no-such-file"));
 
     assert(state.document.line_count == 1);
     assert(document_get_line(&state.document, 0)->length == 1);

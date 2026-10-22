@@ -15,6 +15,24 @@ The implementation repository maintains four complementary context documents:
 
 ---
 
+## Chapter 55 — Final Integration and Release
+
+### 55.1 Architecture and Dependency Review
+
+The architecture review found that `src/state/editor_state.c` directly included `file/file.h` and called File Manager functions for load, save, and Save As. This contradicted the existing System Architecture rule that the Core Layer must not depend on the Platform Layer. The implementation passed its tests, but that did not make the dependency direction correct. The documented architecture already supplied the decision, so the fix did not require a new ADR.
+
+### 55.2 Module and Interface Cleanup
+
+File-operation coordination now belongs to the Application Layer's Command Engine. The public application-level operations are `command_engine_load_file()`, `command_engine_save_file()`, and `command_engine_save_as()`. Startup loading and interactive saving use these operations. `EditorState` now offers state-only operations to adopt a staged Document and its allocated path, take ownership of a new file association, and mark a document clean after persistence succeeds. It no longer includes `file/file.h` or performs file I/O.
+
+Loading stages the path and decoded Document before changing the active state. Saving clears the Dirty Flag only after the File Manager reports success. Save As allocates its new path before writing and changes the file association only after the write succeeds. These preserve the previous failure guarantees while restoring the intended dependency direction.
+
+Verification after the refactor: all eleven CTest tests passed in GCC Debug, sanitizer-enabled Debug with AddressSanitizer/UndefinedBehaviorSanitizer, warning-clean GCC Debug (`-Wall -Wextra -Wpedantic -Werror`), Release, logging-disabled Debug, warning-clean Clang Debug, and a fresh separate Debug build. These checks were run in the current Linux/POSIX environment with Python 3 available for the pseudo-terminal integration test.
+
+The strict Clang portability check initially exposed missing final newlines in eleven existing C source/header files; those files were normalized, after which Clang warning-clean compilation and all eleven tests passed. The README and `RELEASE_NOTES.md` now document actual controls, build options, current limitations, and the missing license decision. The packaged source archive was extracted into a separate directory and configured/built/tested from scratch; all eleven tests passed. The final pseudo-terminal integration test passed with the packaged source. Chapter 55 is complete as a reviewable source release candidate for the current Linux/POSIX verification scope. Testing on additional operating systems was not performed, and public redistribution remains gated on a license decision.
+
+---
+
 ## Chapter 45 — Establishing the Runtime
 
 Chapter 45 established the first executable runtime of the editor.

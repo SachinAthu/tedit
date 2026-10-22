@@ -1,7 +1,4 @@
 #include "editor_state.h"
-#include "common/logger.h"
-#include "file/file.h"
-
 #include <string.h>
 #include <stdlib.h>
 
@@ -47,60 +44,25 @@ bool editor_state_init(EditorState *state)
 }
 
 /*
- * Replace the current document with the contents of the UTF-8 file at `path`.
- *
- * The path string is copied up front (so the caller may free its own), but
- * the current document, file association, and dirty flag are only replaced
- * after the file loads and decodes successfully; on failure nothing changes.
- *
- * Parameters:
- *   state - the state to update; must not be NULL.
- *   path  - path of the file to load; must not be NULL.
- *
- * Returns:
- *   true on success, false on NULL arguments, allocation failure, or if the
- *   file could not be opened, read, or decoded.
+ * Adopt a successfully loaded Document and its allocated file association.
+ * No file-system APIs are used in the Core Layer; loading and staging are
+ * performed by the Application Layer before this state transition.
  */
-bool editor_state_load_file(EditorState *state, const char *path)
+bool editor_state_adopt_loaded_document(EditorState *state, Document *replacement, char *owned_file_path)
 {
-    if (state == NULL || path == NULL)
+    if (state == NULL || replacement == NULL || owned_file_path == NULL)
     {
         return false;
     }
 
-    char *new_path;
-    size_t path_length = strlen(path);
-
-    if (path_length == SIZE_MAX)
-    {
-        return false;
-    }
-
-    new_path = malloc(path_length + 1);
-    if (new_path == NULL)
-    {
-        return false;
-    }
-    memcpy(new_path, path, path_length + 1);
-
-    /* Do not change the current state or path unless loading succeeds. */
-    FileLoadResult load_result = file_load_document(path, &state->document);
-    if (load_result != FILE_LOAD_OK)
-    {
-        TEDIT_LOG_WARN("file", "load failed: path=\"%s\" result=%d", path, (int)load_result);
-        free(new_path);
-        return false;
-    }
-    TEDIT_LOG_INFO("file", "loaded file: path=\"%s\"", path);
+    document_destroy(&state->document);
+    state->document = *replacement;
+    memset(replacement, 0, sizeof(*replacement));
 
     free(state->file_path);
-    state->file_path = new_path;
+    state->file_path = owned_file_path;
     cursor_init(&state->cursor);
     viewport_init(&state->viewport);
-    if (state->is_dirty)
-    {
-        TEDIT_LOG_INFO("state", "Dirty Flag changed: dirty -> clean after load");
-    }
     state->is_dirty = false;
     state->filename_entry_active = false;
     state->filename_entry[0] = '\0';
@@ -108,103 +70,38 @@ bool editor_state_load_file(EditorState *state, const char *path)
     state->filename_entry_cursor = 0;
     state->quit_confirmation_active = false;
     state->quit_after_save = false;
-
     return true;
 }
 
 /*
- * Write the document to the file at `path` and clear the dirty flag.
- *
- * Parameters:
- *   state - the state whose document is saved; must not be NULL.
- *   path  - destination path; must not be NULL.
- *
- * Returns:
- *   true if the file was written and the dirty flag cleared, false on NULL
- *   arguments or a write failure. On failure the dirty flag stays set so
- *   unsaved work is never silently lost.
+ * Replace the file association using a path whose storage is already owned
+ * by the caller. The transfer itself cannot fail, which lets Save As prepare
+ * all required memory before committing the disk write.
  */
-bool editor_state_save_file(EditorState *state, const char *path)
+void editor_state_take_file_path(EditorState *state, char *owned_file_path)
 {
-    if (state == NULL || path == NULL)
+    if (state == NULL)
     {
-        return false;
+        free(owned_file_path);
+        return;
     }
 
-    FileSaveResult save_result = file_save_document(path, &state->document);
-    if (save_result != FILE_SAVE_OK)
+    if (state->file_path != owned_file_path)
     {
-        TEDIT_LOG_WARN("file", "save failed: path=\"%s\" result=%d dirty=%s",
-                       path, (int)save_result, state->is_dirty ? "true" : "false");
-        return false;
+        free(state->file_path);
+        state->file_path = owned_file_path;
     }
-
-    TEDIT_LOG_INFO("file", "saved file: path=\"%s\"", path);
-    if (state->is_dirty)
-    {
-        TEDIT_LOG_INFO("state", "Dirty Flag changed: dirty -> clean after save");
-    }
-    state->is_dirty = false;
-    return true;
 }
 
 /*
- * Write the document to a new path and remember that path as the file
- * association.
- *
- * The new path is allocated before anything is written, and the old
- * association is replaced only after the save succeeds - so a failed save
- * keeps both the document and its previous file association intact.
- *
- * Parameters:
- *   state - the state to update; must not be NULL.
- *   path  - destination path; must not be NULL or empty.
- *
- * Returns:
- *   true if the file was written, the new path became the association, and
- *   the dirty flag was cleared; false otherwise.
+ * Mark the current Document clean after a successful File Manager operation.
  */
-bool editor_state_save_as(EditorState *state, const char *path)
+void editor_state_mark_clean(EditorState *state)
 {
-    char *new_path;
-    size_t path_length;
-
-    if (state == NULL || path == NULL || path[0] == '\0')
+    if (state != NULL)
     {
-        return false;
+        state->is_dirty = false;
     }
-
-    path_length = strlen(path);
-    if (path_length == SIZE_MAX)
-    {
-        return false;
-    }
-
-    new_path = malloc(path_length + 1);
-    if (new_path == NULL)
-    {
-        return false;
-    }
-    memcpy(new_path, path, path_length + 1);
-
-    FileSaveResult save_result = file_save_document(path, &state->document);
-    if (save_result != FILE_SAVE_OK)
-    {
-        TEDIT_LOG_WARN("file", "save failed: path=\"%s\" result=%d dirty=%s",
-                       path, (int)save_result, state->is_dirty ? "true" : "false");
-        free(new_path);
-        return false;
-    }
-
-    TEDIT_LOG_INFO("file", "saved file: path=\"%s\"", path);
-    free(state->file_path);
-    state->file_path = new_path;
-    if (state->is_dirty)
-    {
-        TEDIT_LOG_INFO("state", "Dirty Flag changed: dirty -> clean after save");
-    }
-    state->is_dirty = false;
-    return true;
 }
 
 /*

@@ -47,6 +47,15 @@ typedef struct
 } EditorCommand;
 
 /*
+ * Application-level file operations. These coordinate File Manager calls
+ * with Core state transitions while keeping Editor State independent of the
+ * File Manager.
+ */
+bool command_engine_load_file(EditorState *state, const char *path);
+bool command_engine_save_file(EditorState *state, const char *path);
+bool command_engine_save_as(EditorState *state, const char *path);
+
+/*
  * Execute one command against the editor state.
  *
  * The command may edit the document, move the cursor, save the file, open
@@ -69,10 +78,6 @@ typedef struct
  *   true on success, false on NULL arguments. On success `redraw` and
  *   `should_quit` are always written (false when the command did nothing).
  */
-bool command_engine_execute(EditorState *state,
-                            const EditorCommand *command,
-                            const char *save_path,
-                            bool *redraw,
-                            bool *should_quit);
+bool command_engine_execute(EditorState *state, const EditorCommand *command, const char *save_path, bool *redraw, bool *should_quit);
 
 #endif

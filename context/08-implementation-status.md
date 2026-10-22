@@ -2,11 +2,11 @@
 
 ## Project Status
 
-**Active — Chapter 54 hardening complete; diagnostic logging implemented; Chapter 55 is next**
+**Chapter 55 implementation complete as a reviewable release candidate; public distribution awaits a license decision**
 
 Chapters 45–51, Chapter 52 sections 52.2–52.8, Chapter 53 sections 53.2–53.11, and Chapter 54 sections 54.1–54.7 are complete for the current implementation scope. The diagnostic logging follow-up adds `src/common/logger.{h,c}`, the `ERROR`, `WARN`, `INFO`, and `DEBUG` levels, timestamped component-labelled records, and best-effort logging to `log.txt`. The logger opens the file in write mode. Development builds enable application logging by default; Release builds omit application log calls, and `TEDIT_ENABLE_LOGGING=OFF` disables them explicitly. The editor and logger are implemented in C99. The optional Python POSIX pseudo-terminal test is only an external integration harness.
 
-The current CMake configuration registers ten C test targets and a POSIX pseudo-terminal integration test when Python 3 is available. The implementation record reports all eleven CTest tests passing in Debug with diagnostics/logging, sanitizer-enabled, warning-clean, Release, and explicit logging-disabled configurations. Remaining hardening limitations include deterministic allocation-failure injection, exhaustive terminal-write failure injection, and known Unicode/filename display limitations. **Next milestone: Chapter 55 — Final Integration and Release.**
+The current CMake configuration registers ten C test targets and a POSIX pseudo-terminal integration test when Python 3 is available. The implementation record reports all eleven CTest tests passing in Debug with diagnostics/logging, sanitizer-enabled, warning-clean, Release, and explicit logging-disabled configurations. Remaining hardening limitations include deterministic allocation-failure injection, exhaustive terminal-write failure injection, and known Unicode/filename display limitations. **Chapter 55 — Final Integration and Release is complete for the current Linux/POSIX verification scope.**
 
 > **Status note:** Chapter-specific entries later in this document preserve historical milestone records, including the test counts and “next step” notes that were accurate at the time. The current status, capability, verification, summary, milestone, and limitation sections above/below take precedence for the present implementation snapshot.
 
@@ -169,19 +169,79 @@ These verification statements summarize the current implementation records. Hist
 | Diagnostic logging                                                            | Implemented in `src/common/logger.{h,c}`; write-mode `log.txt`, four levels, timestamps, component labels            |
 | Automated tests                                                               | Ten C test targets plus optional POSIX pseudo-terminal test; eleven CTest tests when Python 3 is available           |
 | Remaining hardening                                                           | Allocation-failure injection, exhaustive terminal-write failure injection, broader resize matrix                     |
-| Next milestone                                                                | Chapter 55 — Final Integration and Release                                                                           |
+| Project status                                                                 | Chapter 55 implementation complete as a release candidate; license decision remains open                           |
 
 ## Current Milestone
 
-**Chapter 54 hardening complete; diagnostic logging follow-up implemented.**
+**Chapter 55 — Final Integration and Release complete for the current verification scope.**
 
 The current implementation includes Document/Cursor/Viewport invariant tests, pre-serialization storage validation, internal assertions, malformed-input parser recovery, terminal restoration and resize handling, POSIX pseudo-terminal lifecycle tests, and the persistent diagnostic logger. The logger uses write mode and does not modify Editor State. The reported build matrix passes all eleven CTest tests when Python 3 is available.
 
-## Next Milestone
+## Release Readiness Gate
 
-**Chapter 55 — Final Integration and Release**
+**Before public distribution:** select and add an appropriate project license, then rerun the release checks against the final licensed source snapshot.
 
-The next milestone should reconcile the implementation against the SRS and architecture documents, verify the documented clean-build workflow, review known issues and test coverage, and prepare a release-ready repository snapshot.
+Chapter 55 reviewed architecture/dependency direction, removed the Editor State → File Manager dependency, validated GCC/Clang and Debug/Release/sanitizer/logging configurations, tested a clean extracted archive, updated documentation, and prepared a source release-candidate archive. Cross-platform OS testing was not performed. Public redistribution remains gated on selecting a license.
+
+### Chapter 55.1 — Architecture and Dependency Review
+
+- [x] Reviewed the current module responsibilities and the documented dependency rules.
+- [x] Identified `src/state/editor_state.c` depending on `src/file/file.h`, contrary to the Core Layer independence rule.
+- [x] Confirmed that the existing architecture already specifies the intended direction; no new ADR was necessary.
+
+### Chapter 55.2 — Module and Interface Cleanup
+
+- [x] Removed File Manager and logger includes and file I/O calls from `EditorState` implementation.
+- [x] Added Application Layer coordination APIs for load, save, and Save As to the Command Engine.
+- [x] Routed startup loading and interactive save paths through the Command Engine.
+- [x] Preserved staged-load, Dirty Flag, and Save As file-association failure guarantees.
+- [x] Updated state-level file-operation tests to exercise the Application Layer coordinator.
+- [x] GCC Debug, sanitizer-enabled, warning-clean, Release, and logging-disabled builds pass all eleven CTest tests in this POSIX/Python environment.
+- [x] Clang warning-clean build and a separate clean Debug build pass all eleven CTest tests.
+- [x] Updated README and added Chapter 55 release-candidate notes; license selection remains open.
+
+### Chapter 55.3 — Portability Checks
+
+- [x] GCC 14.2.0 and Clang strict-warning builds compile on the current Linux/POSIX host.
+- [x] Normalized missing final newlines in eleven existing C source/header files after Clang exposed `-Wnewline-eof` under `-Werror`.
+- [x] Confirmed all eleven tests pass under the Clang warning-clean build.
+- [x] Recorded that testing on other operating systems/POSIX implementations remains outside this environment's verification scope.
+
+### Chapter 55.4 — Debug and Release Build Configurations
+
+- [x] Debug with logging enabled passes all eleven tests.
+- [x] Release passes all eleven tests.
+- [x] Debug with logging disabled passes all eleven tests.
+- [x] AddressSanitizer/UndefinedBehaviorSanitizer build passes all eleven tests with leak detection and halt-on-error settings.
+- [x] GCC and Clang warning-clean builds pass all eleven tests.
+
+### Chapter 55.5 — Clean Build and Reproducibility Checks
+
+- [x] Configured and built in a fresh separate Debug build directory.
+- [x] Extracted the packaged source archive to a separate directory, configured from scratch, built, and passed all eleven tests.
+
+### Chapter 55.6 — Packaging and Release Artifacts
+
+- [x] Created a source-only release-candidate ZIP without build outputs or `log.txt`.
+- [x] Generated a SHA-256 checksum file.
+- [x] Recorded that the archive does not grant reuse or redistribution rights because no license has been selected.
+
+### Chapter 55.7 — User and Developer Documentation
+
+- [x] Rewrote README build/run instructions to match current behavior and supported options.
+- [x] Documented key bindings, architecture boundaries, known limitations, and optional Python integration-test behavior.
+- [x] Added `RELEASE_NOTES.md` for scope, verification, and limitations.
+
+### Chapter 55.8 — Final End-to-End Validation
+
+- [x] The pseudo-terminal integration test passes in all tested build configurations.
+- [x] The extracted release-candidate archive passes the full eleven-test suite.
+
+### Chapter 55.9 — Final Implementation Status
+
+- [x] Updated current state, implementation status, implementation notes, and known issues.
+- [x] Recorded the dependency correction and the evidence supporting the release-candidate status.
+- [x] Kept unresolved hardening limitations and the missing license decision explicit.
 
 ## Current Limitations
 
@@ -189,6 +249,7 @@ The next milestone should reconcile the implementation against the SRS and archi
 - Unicode display width uses POSIX `wcwidth()` where available and fallback ranges for common combining and wide-character blocks. Grapheme clusters, emoji ZWJ sequences, a complete versioned Unicode width database, and terminal-specific width differences remain limitations.
 - Ctrl-S saves an associated Document to its current path. There is no separate Save As command for an already-associated Document.
 - Deterministic allocation-failure injection and exhaustive terminal-output write-failure injection are not implemented.
+- No license has been selected; the source archive is a reviewable release candidate and does not grant redistribution or reuse permissions.
 - The logger uses the fixed relative path `log.txt`; custom log-path configuration and explicit runtime log-level configuration are not implemented.
 - Logging is best-effort and buffered. If the filesystem reports a write failure, the editor continues, and the final buffered records may be lost.
 - The pseudo-terminal integration test requires a POSIX environment and Python 3; the C implementation itself does not depend on Python.

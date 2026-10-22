@@ -6,11 +6,24 @@ Terminal text editor implementation in C99 for Linux/POSIX, developed incrementa
 
 ## Current Milestone
 
-**Chapter 54 hardening complete; diagnostic logging follow-up implemented. Next: Chapter 55 — Final Integration and Release.**
+**Chapter 55 implementation complete as a reviewable release candidate; public distribution awaits a license decision.**
 
 Chapter 54 established a sanitizer-enabled build, regression checks for Document/Cursor/Viewport invariants, pre-serialization Document storage validation, internal invariant assertions, malformed-input parser recovery, terminal restoration, resize handling, and POSIX pseudo-terminal lifecycle tests. The subsequent Diagnostic Logging follow-up adds `src/common/logger.{h,c}`, four severity levels, timestamps, component labels, write-mode `log.txt` output, and integration with lifecycle, terminal, input, command, rendering, file-operation, and Dirty Flag events. Character input is logged as a Unicode code point; document text is not logged. Logging is best-effort and does not own or mutate Editor State.
 
-The current CMake project registers ten C unit-test targets and, on POSIX systems when Python 3 is available, one pseudo-terminal integration test: eleven CTest tests in the normal supported environment. The implementation records report that Debug with diagnostics/logging, AddressSanitizer/UndefinedBehaviorSanitizer, warning-clean, Release, and explicit logging-disabled configurations pass all eleven tests. The Python test is only an external POSIX integration harness; the editor and logger implementation are in C99. Deterministic allocator-failure injection and exhaustive terminal-write failure injection remain open.
+The current CMake project registers ten C unit-test targets and, on POSIX systems when Python 3 is available, one pseudo-terminal integration test: eleven CTest tests in the normal supported environment. Following the Chapter 55.2 dependency correction, all eleven tests pass in GCC Debug with diagnostics/logging, GCC AddressSanitizer/UndefinedBehaviorSanitizer, GCC warning-clean (`-Wall -Wextra -Wpedantic -Werror`), GCC Release, GCC logging-disabled Debug, Clang warning-clean Debug, and a fresh separate Debug build. The Python test is only an external POSIX integration harness; the editor and logger implementation are in C99. Deterministic allocator-failure injection and exhaustive terminal-write failure injection remain open.
+
+### Chapter 55.2 — Module and Interface Cleanup
+
+The Editor State module no longer includes or calls the File Manager. The Application Layer's Command Engine coordinates file loading, saving, and Save As through `command_engine_load_file()`, `command_engine_save_file()`, and `command_engine_save_as()`. Startup loading uses the same application-level boundary. Editor State exposes state-transition operations that adopt a successfully loaded Document, take ownership of an already allocated file path, and mark the Document clean after a confirmed successful save. The File Manager retains UTF-8 conversion and persistence responsibilities. Failed loads preserve the existing state; failed saves preserve the Dirty Flag; failed Save As operations preserve the previous file association. The original architecture already prohibited the Core-to-Platform dependency, so no ADR change was required.
+
+### Chapter 55.3–55.9 — Portability, Release Verification, and Status
+
+- GCC 14.2.0 and Clang both compile the project on the current Linux/POSIX host; strict warning builds pass with `-Wall -Wextra -Wpedantic -Werror`.
+- Debug, Release, logging-disabled, and AddressSanitizer/UndefinedBehaviorSanitizer configurations pass all eleven CTest tests in the current environment.
+- A fresh source archive was extracted into a separate directory, configured from scratch, built, and passed all eleven tests, including the pseudo-terminal integration test.
+- `README.md` now describes the actual controls, build options, architecture, and known limitations. `RELEASE_NOTES.md` records the Chapter 55 changes and verification scope.
+- The source release-candidate archive is available, but no license has been selected. Do not treat it as permission to redistribute or reuse the code.
+- Validation on additional operating systems or POSIX implementations was not performed; the portability claim is limited to GCC/Clang compilation and tests on this Linux/POSIX environment.
 
 The interface layout now places the Status Bar on the bottom row, reserves one blank separator row above the white Message Bar, and renders Message Bar text in black. During filename entry, the prompt and terminal cursor use the Message Bar row. Filename editing supports Left/Right, insertion at the cursor, Backspace, and Delete; movement and deletion respect UTF-8 byte boundaries.
 

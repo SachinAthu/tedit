@@ -74,49 +74,24 @@ typedef struct
 bool editor_state_init(EditorState *state);
 
 /*
- * Replace the current document with the contents of the UTF-8 file at `path`.
- *
- * The current document, file association, and dirty flag are kept until the
- * file has been read and decoded successfully; on failure nothing changes.
- *
- * Parameters:
- *   state - the state to update; must not be NULL.
- *   path  - path of the file to load; must not be NULL.
- *
- * Returns:
- *   true on success, false on NULL arguments, allocation failure, or if the
- *   file could not be opened, read, or decoded.
+ * Adopt a Document that has already been loaded successfully, replacing the
+ * current document and file association. Ownership of `replacement`'s
+ * storage and `owned_file_path` transfers to the state on success. The
+ * caller must pass a separately initialized/staged Document and an allocated
+ * path string. This operation performs no file-system work.
  */
-bool editor_state_load_file(EditorState *state, const char *path);
+bool editor_state_adopt_loaded_document(EditorState *state, Document *replacement, char *owned_file_path);
 
 /*
- * Write the document to the file at `path` and clear the dirty flag.
- *
- * Parameters:
- *   state - the state whose document is saved; must not be NULL.
- *   path  - destination path; must not be NULL.
- *
- * Returns:
- *   true if the file was written and the dirty flag cleared, false on NULL
- *   arguments or a write failure. On failure the dirty flag stays set so
- *   unsaved work is never silently lost.
+ * Replace the current file association with an already allocated path.
+ * Ownership of `owned_file_path` transfers to the state. A NULL path clears
+ * the association. This operation cannot fail for a valid state pointer.
  */
-bool editor_state_save_file(EditorState *state, const char *path);
+void editor_state_take_file_path(EditorState *state, char *owned_file_path);
 
-/*
- * Write the document to a new path and remember that path as the file
- * association.
- *
- * Parameters:
- *   state - the state to update; must not be NULL.
- *   path  - destination path; must not be NULL or empty.
- *
- * Returns:
- *   true if the file was written, the new path became the association, and
- *   the dirty flag was cleared; false otherwise. On failure the old
- *   association and the dirty flag are preserved.
- */
-bool editor_state_save_as(EditorState *state, const char *path);
+/* Mark the current document as saved after the Application Layer confirms
+ * that persistence succeeded. */
+void editor_state_mark_clean(EditorState *state);
 
 /*
  * Copy `message` into the state's Message Bar text, truncating it if it is

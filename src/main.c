@@ -579,12 +579,14 @@ int main(int argc, char *argv[])
         TEDIT_LOG_ERROR("lifecycle", "failed to install signal handlers");
         goto early_cleanup;
     }
+
     if (!terminal_init(&terminal))
     {
         TEDIT_LOG_ERROR("terminal", "terminal initialization failed");
         application_restore_signal_handlers();
         goto early_cleanup;
     }
+
     if (!terminal_enable_raw_mode(&terminal))
     {
         TEDIT_LOG_ERROR("terminal", "failed to enable raw mode");
@@ -592,6 +594,7 @@ int main(int argc, char *argv[])
         application_restore_signal_handlers();
         goto early_cleanup;
     }
+
     if (!terminal_enter_alternate_screen(&terminal))
     {
         TEDIT_LOG_ERROR("terminal", "failed to enter alternate screen");
@@ -599,25 +602,29 @@ int main(int argc, char *argv[])
         application_restore_signal_handlers();
         goto early_cleanup;
     }
+
     if (!editor_state_init(&state))
     {
         TEDIT_LOG_ERROR("state", "Editor State initialization failed");
         goto cleanup;
     }
+
     TEDIT_LOG_INFO("state", "Editor State initialized");
     state_initialized = true;
 
-    if (startup_path != NULL && !editor_state_load_file(&state, startup_path))
+    if (startup_path != NULL && !command_engine_load_file(&state, startup_path))
     {
         startup_load_failed = true;
         TEDIT_LOG_ERROR("file", "startup file load failed: path=\"%s\"", startup_path);
         goto cleanup;
     }
+
     if (terminal.columns < 2 || !renderer_init(&renderer, terminal.rows, terminal.columns - 1))
     {
         TEDIT_LOG_ERROR("renderer", "initialization failed for terminal rows=%zu columns=%zu", terminal.rows, terminal.columns);
         goto cleanup;
     }
+
     TEDIT_LOG_INFO("renderer", "initialized rows=%zu columns=%zu", terminal.rows, terminal.columns - 1);
     renderer_initialized = true;
 
@@ -626,6 +633,7 @@ int main(int argc, char *argv[])
         TEDIT_LOG_ERROR("renderer", "initial frame rendering failed");
         goto cleanup;
     }
+
     if (!application_event_loop(&terminal, &state, &renderer, startup_path))
     {
         TEDIT_LOG_ERROR("lifecycle", "event loop terminated after an unrecoverable error");

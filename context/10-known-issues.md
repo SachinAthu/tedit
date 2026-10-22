@@ -7,6 +7,7 @@
 - **Unicode display width:** Wide code points and combining marks use POSIX `wcwidth()` plus fallback ranges, but this is not a complete, versioned Unicode width database. Emoji ZWJ grapheme clusters, variation-selector presentation, and terminal-specific width disagreements remain possible.
 - **Filename display:** Non-ASCII filename bytes are preserved for filesystem operations but currently displayed as `?` in the Status Bar and filename-entry prompt.
 - **Configuration:** Built-in tab width defaults to four columns; loading user configuration files and applying command-line configuration overrides are not implemented.
+- **Licensing:** No project license has been selected or added. A license decision is required before publishing the repository with reuse or redistribution permissions.
 - **Rendering strategy:** Incremental or dirty-cell rendering is not implemented; the Renderer uses full-frame redraws.
 - **Save behavior:** There is no separate Save As command for a document that already has an associated path; Ctrl-S saves to its current path. For unnamed documents, Ctrl-S activates filename entry.
 

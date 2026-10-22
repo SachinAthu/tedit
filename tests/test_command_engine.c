@@ -470,7 +470,7 @@ static void test_dirty_quit_saves_named_document(void)
     assert(close(descriptor) == 0);
     assert(unlink(path) == 0);
     assert(editor_state_init(&state));
-    assert(editor_state_save_as(&state, path));
+    assert(command_engine_save_as(&state, path));
     execute(&state, EDITOR_COMMAND_INSERT_CHARACTER, 'n', &redraw, &should_quit);
     assert(state.is_dirty);
 

@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include "command/command_engine.h"
 #include "document/document.h"
 #include "file/file.h"
 #include "state/editor_state.h"
@@ -55,7 +56,7 @@ static void test_editor_state_save_clears_dirty_flag_after_success(void)
     assert(document_insert_character(&state.document, 1, 0, 'B'));
     state.is_dirty = true;
 
-    assert(editor_state_save_file(&state, path));
+    assert(command_engine_save_file(&state, path));
     assert(!state.is_dirty);
     assert(state.document.line_count == 2);
     assert(document_get_line(&state.document, 0)->length == 2);
@@ -85,7 +86,7 @@ static void test_failed_save_preserves_dirty_flag_document_and_destination(void)
     /* Simulate corrupted internal state to exercise the serializer's guard. */
     document_get_line(&state.document, 0)->data[0] = UINT32_C(0xD800);
 
-    assert(!editor_state_save_file(&state, path));
+    assert(!command_engine_save_file(&state, path));
     assert(state.is_dirty);
     assert(state.document.line_count == 1);
     assert(document_get_line(&state.document, 0)->length == 1);
@@ -103,8 +104,8 @@ static void test_invalid_save_arguments_preserve_dirty_flag(void)
 
     assert(editor_state_init(&state));
     state.is_dirty = true;
-    assert(!editor_state_save_file(&state, NULL));
-    assert(!editor_state_save_file(NULL, "/tmp/tedit-save-invalid"));
+    assert(!command_engine_save_file(&state, NULL));
+    assert(!command_engine_save_file(NULL, "/tmp/tedit-save-invalid"));
     assert(state.is_dirty);
     editor_state_destroy(&state);
 }
@@ -131,7 +132,7 @@ static void test_replace_failure_preserves_state_and_cleans_temporary_file(void)
     state.is_dirty = true;
 
     /* Renaming a temporary regular file over a directory must fail. */
-    assert(!editor_state_save_file(&state, path));
+    assert(!command_engine_save_file(&state, path));
     assert(state.is_dirty);
     assert(state.document.line_count == 1);
     assert(document_get_line(&state.document, 0)->length == 1);
@@ -212,7 +213,7 @@ static void test_temporary_file_creation_failure_preserves_dirty_state(void)
     assert(document_insert_character(&state.document, 0, 0, 'x'));
     state.is_dirty = true;
 
-    assert(!editor_state_save_file(&state, "/tmp/tedit-missing-directory/file.txt"));
+    assert(!command_engine_save_file(&state, "/tmp/tedit-missing-directory/file.txt"));
     assert(state.is_dirty);
     assert(document_get_line(&state.document, 0)->length == 1);
     assert(document_get_line(&state.document, 0)->data[0] == (uint32_t)'x');
@@ -261,18 +262,18 @@ static void test_save_as_association_changes_only_after_success(void)
     assert(mkdir(failure_path, 0700) == 0);
 
     assert(editor_state_init(&state));
-    assert(editor_state_load_file(&state, original_path));
+    assert(command_engine_load_file(&state, original_path));
     assert(state.file_path != NULL && strcmp(state.file_path, original_path) == 0);
     assert(document_insert_character(&state.document, 0, 3, 'x'));
     state.is_dirty = true;
 
-    assert(!editor_state_save_as(&state, failure_path));
+    assert(!command_engine_save_as(&state, failure_path));
     assert(state.file_path != NULL && strcmp(state.file_path, original_path) == 0);
     assert(state.is_dirty);
     line = document_get_line(&state.document, 0);
     assert(line != NULL && line->length == 4 && line->data[3] == 'x');
 
-    assert(editor_state_save_as(&state, new_path));
+    assert(command_engine_save_as(&state, new_path));
     assert(state.file_path != NULL && strcmp(state.file_path, new_path) == 0);
     assert(!state.is_dirty);
     line = document_get_line(&state.document, 0);

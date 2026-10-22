@@ -3,9 +3,160 @@
 
 #include "cursor/cursor.h"
 #include "document/document.h"
+#include "file/file.h"
 #include "state/editor_state.h"
 
+#include <stdlib.h>
 #include <string.h>
+
+/*
+ * Load a file transactionally. The file is decoded into a temporary Document
+ * and the path is allocated before the Core state is changed. A failed read,
+ * decode, or allocation leaves the existing Editor State untouched.
+ */
+bool command_engine_load_file(EditorState *state, const char *path)
+{
+    Document replacement;
+    char *owned_path;
+    size_t path_length;
+    FileLoadResult result;
+
+    if (state == NULL || path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+
+    path_length = strlen(path);
+
+    if (path_length == SIZE_MAX)
+    {
+        return false;
+    }
+
+    owned_path = malloc(path_length + 1);
+
+    if (owned_path == NULL)
+    {
+        return false;
+    }
+
+    memcpy(owned_path, path, path_length + 1);
+
+    if (!document_init(&replacement))
+    {
+        free(owned_path);
+        return false;
+    }
+
+    result = file_load_document(path, &replacement);
+
+    if (result != FILE_LOAD_OK)
+    {
+        TEDIT_LOG_WARN("file", "load failed: path=\"%s\" result=%d", path, (int)result);
+        document_destroy(&replacement);
+        free(owned_path);
+        return false;
+    }
+
+    if (!editor_state_adopt_loaded_document(state, &replacement, owned_path))
+    {
+        document_destroy(&replacement);
+        free(owned_path);
+        return false;
+    }
+
+    TEDIT_LOG_INFO("file", "loaded file: path=\"%s\"", path);
+
+    return true;
+}
+
+/*
+ * Persist the current Document and clear the Dirty Flag only after the File
+ * Manager reports a successful atomic replacement.
+ */
+bool command_engine_save_file(EditorState *state, const char *path)
+{
+    FileSaveResult result;
+
+    if (state == NULL || path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+
+    result = file_save_document(path, &state->document);
+
+    if (result != FILE_SAVE_OK)
+    {
+        TEDIT_LOG_WARN("file", "save failed: path=\"%s\" result=%d dirty=%s",
+                       path, (int)result, state->is_dirty ? "true" : "false");
+        return false;
+    }
+
+    TEDIT_LOG_INFO("file", "saved file: path=\"%s\"", path);
+
+    if (state->is_dirty)
+    {
+        TEDIT_LOG_INFO("state", "Dirty Flag changed: dirty -> clean after save");
+    }
+
+    editor_state_mark_clean(state);
+
+    return true;
+}
+
+/*
+ * Save under a new path. Allocate the new association before writing so a
+ * successful disk replacement can always be followed by a no-fail state
+ * association update. On failure, the old path and Dirty Flag are preserved.
+ */
+bool command_engine_save_as(EditorState *state, const char *path)
+{
+    char *owned_path;
+    size_t path_length;
+    FileSaveResult result;
+
+    if (state == NULL || path == NULL || path[0] == '\0')
+    {
+        return false;
+    }
+
+    path_length = strlen(path);
+
+    if (path_length == SIZE_MAX)
+    {
+        return false;
+    }
+
+    owned_path = malloc(path_length + 1);
+
+    if (owned_path == NULL)
+    {
+        return false;
+    }
+
+    memcpy(owned_path, path, path_length + 1);
+
+    result = file_save_document(path, &state->document);
+
+    if (result != FILE_SAVE_OK)
+    {
+        TEDIT_LOG_WARN("file", "save failed: path=\"%s\" result=%d dirty=%s", path, (int)result, state->is_dirty ? "true" : "false");
+        free(owned_path);
+        return false;
+    }
+
+    TEDIT_LOG_INFO("file", "saved file: path=\"%s\"", path);
+    editor_state_take_file_path(state, owned_path);
+
+    if (state->is_dirty)
+    {
+        TEDIT_LOG_INFO("state", "Dirty Flag changed: dirty -> clean after save");
+    }
+
+    editor_state_mark_clean(state);
+
+    return true;
+}
 
 /*
  * Mark the document as having unsaved changes.
@@ -325,7 +476,7 @@ static bool command_save(EditorState *state, const char *save_path, bool quittin
         return true;
     }
 
-    if (editor_state_save_file(state, current_path))
+    if (command_engine_save_file(state, current_path))
     {
         (void)editor_state_set_message(state, "Saved successfully.");
         state->quit_after_save = false;
@@ -469,7 +620,7 @@ static bool filename_entry_execute(EditorState *state, const EditorCommand *comm
             return true;
         }
 
-        if (editor_state_save_as(state, state->filename_entry))
+        if (command_engine_save_as(state, state->filename_entry))
         {
             const bool should_quit_after_save = state->quit_after_save;
             filename_entry_clear(state);
