@@ -157,9 +157,9 @@ When contributing code:
 
 ## License
 
-This project has not yet specified a license.
+This project is free and open source software, released under the [MIT License](LICENSE).
 
-If you plan to publish or distribute the project, add an appropriate `LICENSE` file and update this section.
+You are free to use, copy, modify, merge, publish, distribute, sublicense, and sell copies of the software, provided the copyright notice and permission notice are included. The software is provided "as is", without warranty of any kind.
 
 ---
 
