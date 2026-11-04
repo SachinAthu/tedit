@@ -21,7 +21,7 @@ typedef struct
  * The single source of truth for everything the editor knows.
  *
  * All modules read and change application data through this structure. Each
- * field has exactly one owning module (see context/02-system-architecture.md);
+ * field has exactly one owning module (see docs/02-system-architecture.md);
  * every other module may read it but must not modify it directly.
  *
  *   - document:               the text being edited, held in memory.
